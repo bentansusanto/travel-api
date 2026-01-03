@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  travel_mysql:
+    image: mysql:8.0
+    environment:
+      - MYSQL_ROOT_PASSWORD=root
+      - MYSQL_DATABASE=travel_db
+      - MYSQL_USER=traveldb
+      - MYSQL_PASSWORD=traveldb
+    ports:
+      - '3306:3306'
+    volumes:
+      - travel-mysql-data:/var/lib/mysql
+    networks:
+      - travel-network
+
+  travel_api:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    ports:
+      - '8002:8002'
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+      - PORT=8002
+      - DATABASE_HOST=travel_mysql
+      - DATABASE_PORT=3306
+      - DATABASE_NAME=travel_db
+      - DATABASE_USER=traveldb
+      - DATABASE_PASSWORD=traveldb
+    command: pnpm start:dev
+    depends_on:
+      - travel_mysql
+    networks:
+      - travel-network
+
+volumes:
+  travel-mysql-data:
+networks:
+  travel-network:
+    driver: bridge
