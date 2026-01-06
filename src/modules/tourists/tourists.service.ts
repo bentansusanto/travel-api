@@ -261,6 +261,51 @@ export class TouristsService {
     }
   }
 
+  // find tourist by book tour id
+  async findTouristByBookTour(book_tour_id: string): Promise<TouristResponse> {
+    try {
+      const tourists = await this.touristRepository.find({
+        where: { bookTour: { id: book_tour_id } },
+        relations: ['bookTour'],
+      });
+      if (!tourists || tourists.length === 0) {
+        this.logger.error('Tourist not found');
+        throw new HttpException('Tourist not found', HttpStatus.NOT_FOUND);
+      }
+      this.logger.debug(`Success find by book tour id ${book_tour_id}`);
+      return {
+        message: `Success find by book tour id ${book_tour_id}`,
+        data: {
+          book_tour_id: tourists[0].bookTour.id,
+          tourists: tourists.map((t) => ({
+            id: t.id,
+            name: t.name,
+            gender: t.gender,
+            phone_number: t.phone_number,
+            nationality: t.nationality,
+            passport_number: t.passport_number,
+          })),
+        },
+      };
+    } catch (error) {
+      this.logger.error('findTouristByBookTour error', error);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        {
+          Error: [
+            {
+              field: 'general',
+              body: 'Error during find by book tour id tourist',
+            },
+          ],
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   // update tourist
   async update(
     id: string,

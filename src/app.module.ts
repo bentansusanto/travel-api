@@ -8,6 +8,7 @@ import { DestinationModule } from './modules/destination/destination.module';
 import { SeedsModule } from './modules/seeds/seeds.module';
 import { TouristsModule } from './modules/tourists/tourists.module';
 import { UsersModule } from './modules/users/users.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { UsersModule } from './modules/users/users.module';
     DestinationModule,
     BookToursModule,
     TouristsModule,
+    PaymentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

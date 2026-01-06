@@ -14,7 +14,7 @@ async function bootstrap() {
   // app.useGlobalPipes(new ValidationPipe());
   app.use(cookieParser());
   const origins = [
-    'http://localhost:3500',
+    'http://localhost:3200',
     'http://localhost:3700',
     'https://pacifictravelindo.com',
     'https://www.pacifictravelindo.com',

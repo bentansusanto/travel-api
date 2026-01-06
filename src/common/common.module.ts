@@ -17,6 +17,7 @@ import { RolesGuard } from './middlewares/role.guard';
 import { BookTour } from 'src/modules/book-tours/entities/book-tour.entity';
 import { BookTourItems } from 'src/modules/book-tours/entities/book-tour-items.entity';
 import { Tourist } from 'src/modules/tourists/entities/tourist.entity';
+import { Payment } from 'src/modules/payments/entities/payment.entity';
 
 @Global()
 @Module({
@@ -61,6 +62,7 @@ import { Tourist } from 'src/modules/tourists/entities/tourist.entity';
       BookTour,
       BookTourItems,
       Tourist,
+      Payment,
     ]),
     ThrottlerModule.forRoot([
       {

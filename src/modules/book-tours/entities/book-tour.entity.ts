@@ -12,6 +12,7 @@ import {
 } from 'typeorm';
 import { BookTourItems } from './book-tour-items.entity';
 import { Tourist } from 'src/modules/tourists/entities/tourist.entity';
+import { Payment } from 'src/modules/payments/entities/payment.entity';
 
 export enum StatusBookTour {
   DRAFT = 'draft',
@@ -61,6 +62,9 @@ export class BookTour {
 
   @OneToMany(() => Tourist, (tourist) => tourist.bookTour)
   tourists: Tourist[];
+
+  @OneToMany(() => Payment, (payment) => payment.bookTour)
+  payments: Payment[];
 
   @Column()
   created_at: Date;

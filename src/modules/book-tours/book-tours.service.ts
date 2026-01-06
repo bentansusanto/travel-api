@@ -310,4 +310,25 @@ export class BookToursService {
       );
     }
   }
+  // update status book tour
+  async updateStatusBookTour(id: string, status: StatusBookTour) {
+    try {
+      await this.bookTourRepository.update(id, {
+        status: status,
+      });
+    } catch (error) {
+      this.logger.error(`Error during update book tour: ${error.message}`);
+      throw new HttpException(
+        {
+          Error: [
+            {
+              field: 'general',
+              body: 'Error during update book tour',
+            },
+          ],
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 }
