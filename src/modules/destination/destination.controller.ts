@@ -90,6 +90,18 @@ export class DestinationController {
     };
   }
 
+  // find destination by slug
+  @Public()
+  @Get('/slug/:slug')
+  @HttpCode(HttpStatus.OK)
+  async findBySlug(@Param('slug') slug: string): Promise<WebResponse> {
+    const result = await this.destinationService.findDestinationBySlug(slug);
+    return {
+      message: result.message,
+      data: result.data,
+    };
+  }
+
   // update destination
   @Roles('admin', 'owner')
   @Put('/:id/update')
