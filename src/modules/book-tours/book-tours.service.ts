@@ -270,6 +270,11 @@ export class BookToursService {
           'country',
           'book_tour_items.destination',
         ],
+        order: {
+          book_tour_items: {
+            visit_date: 'ASC',
+          },
+        },
       });
       return {
         message: 'Success get book tour',

@@ -1,6 +1,7 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
+import { WebResponse } from 'src/types/response/response.type';
 import {
   TouristResponse,
   TouristResponseSingle,
@@ -10,6 +11,7 @@ import { Logger } from 'winston';
 import { BookToursService } from '../book-tours/book-tours.service';
 import { CreateManyTouristsDto } from './dto/create-many-tourists.dto';
 import { CreateTouristDto, UpdateTouristDto } from './dto/create-tourist.dto';
+import { UpdateManyTouristsDto } from './dto/update-many-tourists.dto';
 import { Tourist } from './entities/tourist.entity';
 
 @Injectable()
@@ -171,6 +173,91 @@ export class TouristsService {
     }
   }
 
+  // update many tourists
+  async updateMany(
+    reqDto: UpdateManyTouristsDto,
+    userId: string,
+  ): Promise<WebResponse> {
+    try {
+      if (!reqDto.tourists || reqDto.tourists.length === 0) {
+        throw new HttpException('No tourists provided', HttpStatus.BAD_REQUEST);
+      }
+
+      for (const t of reqDto.tourists) {
+        const findTourist = await this.findTouristById(t.id);
+
+        if (!findTourist || !findTourist.data) {
+          throw new HttpException(
+            `Tourist ${t.id} not found`,
+            HttpStatus.NOT_FOUND,
+          );
+        }
+
+        // Verify ownership
+        const findBookTour = await this.bookTourService.findBookTourId(
+          findTourist.data.book_tour_id,
+          userId,
+        );
+
+        if (!findBookTour || !findBookTour.data) {
+          throw new HttpException(
+            `Permission denied for tourist ${t.id}`,
+            HttpStatus.FORBIDDEN,
+          );
+        }
+
+        // Passport conflict check
+        if (t.passport_number) {
+          const existing = await this.touristRepository.findOne({
+            where: {
+              passport_number: t.passport_number,
+              id: Not(t.id),
+            },
+          });
+
+          if (existing) {
+            throw new HttpException(
+              `Passport number ${t.passport_number} is already in use by another tourist`,
+              HttpStatus.CONFLICT,
+            );
+          }
+        }
+
+        // Update
+        await this.touristRepository.update(t.id, {
+          name: t.name,
+          gender: t.gender,
+          phone_number: t.phone_number,
+          nationality: t.nationality,
+          passport_number: t.passport_number,
+          updated_at: new Date(),
+        });
+      }
+
+      this.logger.debug(`Success update many tourists`);
+
+      return {
+        message: 'Success update many tourists',
+      };
+    } catch (error) {
+      this.logger.error('updateMany error', error);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        {
+          Error: [
+            {
+              field: 'general',
+              body: 'Error during update many tourists',
+            },
+          ],
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   // find all tourists
   async findAll(userId: string): Promise<TouristResponse> {
     try {
@@ -189,6 +276,7 @@ export class TouristsService {
           book_tour_id: tourists[0].bookTour.id,
           tourists: tourists.map((t) => ({
             id: t.id,
+            book_tour_id: t.bookTour.id,
             name: t.name,
             gender: t.gender,
             phone_number: t.phone_number,
