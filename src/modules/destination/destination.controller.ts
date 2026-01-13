@@ -78,9 +78,21 @@ export class DestinationController {
     };
   }
 
+  // find destination by slug
+  @Public()
+  @Get('/:slug')
+  @HttpCode(HttpStatus.OK)
+  async findBySlug(@Param('slug') slug: string): Promise<WebResponse> {
+    const result = await this.destinationService.findDestinationBySlug(slug);
+    return {
+      message: result.message,
+      data: result.data,
+    };
+  }
+
   // find destination by id
   @Public()
-  @Get('/:id')
+  @Get('/find/:id')
   @HttpCode(HttpStatus.OK)
   async findById(@Param('id') id: string): Promise<WebResponse> {
     const result = await this.destinationService.findDestinationById(id);

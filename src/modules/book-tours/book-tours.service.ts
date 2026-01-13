@@ -145,6 +145,9 @@ export class BookToursService {
           'user',
           'country',
           'book_tour_items.destination',
+          'book_tour_items.destination.translations',
+          'book_tour_items.destination.state',
+          'book_tour_items.destination.state.country',
         ],
       });
 
@@ -168,7 +171,24 @@ export class BookToursService {
           book_tour_items: (findBookTour.book_tour_items || []).map((item) => ({
             id: item.id,
             destination_id: item.destination?.id,
+            destination: {
+              id: item.destination?.id,
+              location: `${item.destination?.state?.name}, ${item.destination?.state?.country?.name}`,
+              price: item.destination?.price,
+              translations: (item.destination?.translations || []).map((t) => ({
+                id: t.id,
+                language_code: t.language_code,
+                name: t.name,
+                slug: t.slug,
+                description: t.description,
+                thumbnail: t.thumbnail,
+                image: t.image,
+                detail_tour: t.detail_tour,
+                facilities: t.facilities,
+              })),
+            },
             visit_date: item.visit_date,
+            created_at: item.created_at,
           })),
         },
       };
@@ -208,6 +228,9 @@ export class BookToursService {
           'user',
           'country',
           'book_tour_items.destination',
+          'book_tour_items.destination.translations',
+          'book_tour_items.destination.state',
+          'book_tour_items.destination.state.country',
         ],
       });
 
@@ -229,7 +252,24 @@ export class BookToursService {
           book_tour_items: bookTour.book_tour_items.map((item) => ({
             id: item.id,
             destination_id: item.destination.id,
+            destination: {
+              id: item.destination.id,
+              location: `${item.destination?.state?.name}, ${item.destination?.state?.country?.name}`,
+              price: item.destination.price,
+              translations: (item.destination.translations || []).map((t) => ({
+                id: t.id,
+                language_code: t.language_code,
+                name: t.name,
+                slug: t.slug,
+                description: t.description,
+                thumbnail: t.thumbnail,
+                image: t.image,
+                detail_tour: t.detail_tour,
+                facilities: t.facilities,
+              })),
+            },
             visit_date: item.visit_date,
+            created_at: item.created_at,
           })),
         })),
       };
@@ -269,6 +309,9 @@ export class BookToursService {
           'user',
           'country',
           'book_tour_items.destination',
+          'book_tour_items.destination.translations',
+          'book_tour_items.destination.state',
+          'book_tour_items.destination.state.country',
         ],
         order: {
           book_tour_items: {
@@ -289,7 +332,24 @@ export class BookToursService {
           book_tour_items: bookTour.book_tour_items.map((item) => ({
             id: item.id,
             destination_id: item.destination.id,
+            destination: {
+              id: item.destination.id,
+              location: `${item.destination?.state?.name}, ${item.destination?.state?.country?.name}`,
+              price: item.destination.price,
+              translations: (item.destination.translations || []).map((t) => ({
+                id: t.id,
+                language_code: t.language_code,
+                name: t.name,
+                slug: t.slug,
+                description: t.description,
+                thumbnail: t.thumbnail,
+                image: t.image,
+                detail_tour: t.detail_tour,
+                facilities: t.facilities,
+              })),
+            },
             visit_date: item.visit_date,
+            created_at: item.created_at,
           })),
         },
       };
@@ -308,6 +368,27 @@ export class BookToursService {
             {
               field: 'general',
               body: 'Error during find book tour',
+            },
+          ],
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+  // update status book tour
+  async updateStatusBookTour(id: string, status: StatusBookTour) {
+    try {
+      await this.bookTourRepository.update(id, {
+        status: status,
+      });
+    } catch (error) {
+      this.logger.error(`Error during update book tour: ${error.message}`);
+      throw new HttpException(
+        {
+          Error: [
+            {
+              field: 'general',
+              body: 'Error during update book tour',
             },
           ],
         },

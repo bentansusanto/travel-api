@@ -12,6 +12,7 @@ import {
 } from 'typeorm';
 import { Roles } from './role.entity';
 import { Session } from './session.entity';
+import { Payment } from 'src/modules/payments/entities/payment.entity';
 
 @Entity('users')
 export class User {
@@ -69,6 +70,9 @@ export class User {
 
   @OneToMany(() => BookTour, (bookTour) => bookTour.user)
   book_tours: BookTour[];
+
+  @OneToMany(() => Payment, (payment) => payment.user)
+  payments: Payment[];
 
   @CreateDateColumn()
   createdAt: Date;
