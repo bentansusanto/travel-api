@@ -12,9 +12,10 @@ import {
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { CurrentUser } from 'src/common/decorators/user.decorator';
 import { WebResponse } from 'src/types/response/response.type';
-import { CreateTouristDto, UpdateTouristDto } from './dto/create-tourist.dto';
-import { TouristsService } from './tourists.service';
 import { CreateManyTouristsDto } from './dto/create-many-tourists.dto';
+import { CreateTouristDto, UpdateTouristDto } from './dto/create-tourist.dto';
+import { UpdateManyTouristsDto } from './dto/update-many-tourists.dto';
+import { TouristsService } from './tourists.service';
 
 @Controller('tourists')
 @Roles('traveller')
@@ -49,7 +50,7 @@ export class TouristsController {
     );
     return {
       message: result.message,
-      data: result.datas,
+      data: result.data,
     };
   }
 
@@ -91,6 +92,21 @@ export class TouristsController {
     return {
       message: result.message,
       data: result.data,
+    };
+  }
+
+  @Put('update-many')
+  @HttpCode(HttpStatus.OK)
+  async updateMany(
+    @CurrentUser() user: any,
+    @Body() updateManyTouristsDto: UpdateManyTouristsDto,
+  ): Promise<WebResponse> {
+    const result = await this.touristsService.updateMany(
+      updateManyTouristsDto,
+      user.id,
+    );
+    return {
+      message: result.message,
     };
   }
 

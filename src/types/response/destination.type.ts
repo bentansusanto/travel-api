@@ -6,6 +6,7 @@ export type DestinationResponse = {
   state_id: string;
   location: string;
   category_destination_id: string;
+  category_destination_name?: string;
   price: number;
   country_id?: string;
   country_name?: string;
