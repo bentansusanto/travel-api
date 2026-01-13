@@ -189,6 +189,7 @@ export class TouristsService {
           book_tour_id: tourists[0].bookTour.id,
           tourists: tourists.map((t) => ({
             id: t.id,
+            book_tour_id: t.bookTour.id,
             name: t.name,
             gender: t.gender,
             phone_number: t.phone_number,

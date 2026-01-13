@@ -62,7 +62,6 @@ export class PaypalService {
 
       const captureData = await captureResponse.json();
 
-      console.log('📦 PayPal Capture Response:', JSON.stringify(captureData, null, 2));
 
       // Jika response error dari PayPal
       if (!captureResponse.ok) {

@@ -5,6 +5,7 @@ export class PaymentData {
   user_id: string;
   book_tour_id?: string;
   total_tourists?: number;
+  invoice_code?: string;
   amount: number;
   currency: string;
   transaction_id?: string;

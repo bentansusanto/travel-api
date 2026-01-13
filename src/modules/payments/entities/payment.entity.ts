@@ -48,6 +48,9 @@ export class Payment {
   @JoinColumn({ name: 'book_tour_id' })
   bookTour: BookTour;
 
+  @Column()
+  invoice_code: string;
+
   @Column({
     nullable: true,
   })

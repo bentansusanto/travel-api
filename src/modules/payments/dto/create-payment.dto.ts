@@ -13,4 +13,7 @@ export class CreatePaymentDto {
   @IsNotEmpty({ message: 'Currency is required' })
   @IsString({ message: 'Currency must be a string' })
   currency: string;
+
+  // Optional: exchange rate from frontend (IDR to USD)
+  exchange_rate?: number;
 }

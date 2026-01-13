@@ -1,5 +1,6 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomInt } from 'crypto';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { PaymentResponse } from 'src/types/response/payment.type';
 import { Repository } from 'typeorm';
@@ -27,10 +28,42 @@ export class PaymentsService {
     @InjectRepository(Payment)
     private readonly paymentsRepository: Repository<Payment>,
   ) {}
-  // paypal order
-  private async payPalOrder(orderId: string, amount: number) {
+  // Exchange rate constant (can be moved to config/env later)
+  private readonly USD_TO_IDR_RATE = 15000;
+
+  // Helper method to convert currency
+  private convertToUSD(amount: number, fromCurrency: string): number {
+    // Normalize currency to uppercase
+    const normalizedCurrency = fromCurrency?.toUpperCase();
+
+    if (normalizedCurrency === 'USD') {
+      return amount;
+    }
+    if (normalizedCurrency === 'IDR') {
+      const converted = amount / this.USD_TO_IDR_RATE;
+    }
+    // Default: assume IDR if unknown currency
+    return amount / this.USD_TO_IDR_RATE;
+  }
+
+  private async payPalOrder(
+    orderId: string,
+    amount: number,
+    currency: string = 'IDR',
+    exchangeRate?: number, // Optional exchange rate from frontend
+  ) {
     // Dapatkan token akses dari PayPal
     const accessToken = await this.paypalService.authPaypal();
+
+    // Log currency conversion
+
+    // Use exchange rate from frontend if provided, otherwise use convertToUSD
+    let convertedAmount: number;
+    if (exchangeRate && currency.toUpperCase() === 'IDR') {
+      convertedAmount = amount * exchangeRate;
+    } else {
+      convertedAmount = this.convertToUSD(amount, currency);
+    }
 
     // buat order paypal
     const orderResponse = await fetch(
@@ -47,22 +80,17 @@ export class PaymentsService {
             {
               amount: {
                 currency_code: 'USD',
-                value: amount.toFixed(2),
+                value: convertedAmount.toFixed(2),
               },
               description: `Order ID: ${orderId}`,
             },
           ],
           application_context: {
-            // return_url: `http://localhost:8081/checkout`,
-            // cancel_url: `http://localhost:8081`,
-            // return_url: `http://localhost:3500/checkout`,
-            // cancel_url: `http://localhost:3500/orders`,
-            return_url: `http://localhost:8000/checkout`,
-            cancel_url: `http://localhost:8000`,
+            return_url: `${process.env.FRONTEND_URL || 'http://localhost:3200'}/en/payments/success`,
+            cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3200'}/en/payments`,
             shipping_preference: 'NO_SHIPPING',
             user_action: 'PAY_NOW',
-            brand_name: 'http://localhost:8000',
-            // brand_name: 'http://localhost:3500',
+            brand_name: 'PacificTravelindo',
           },
         }),
       },
@@ -84,6 +112,25 @@ export class PaymentsService {
       payer_email: payerEmail,
       orderData,
     };
+  }
+
+  // generate ordercode
+  private async generateOrderCode(): Promise<string> {
+    try {
+      const randomCode = randomInt(1000, 9999).toString();
+      const existingOrder = await this.paymentsRepository.findOne({
+        where: { invoice_code: randomCode },
+      });
+
+      if (existingOrder) {
+        return this.generateOrderCode();
+      }
+
+      return randomCode;
+    } catch (error: any) {
+      this.logger.error(error.message);
+      throw new Error(error.message);
+    }
   }
 
   // Create payment
@@ -127,6 +174,8 @@ export class PaymentsService {
         this.logger.error('Tourist not found');
         throw new HttpException('Tourist not found', HttpStatus.NOT_FOUND);
       }
+      // invoice code tour
+      const invoiceCode = `TOUR-${await this.generateOrderCode()}`;
 
       // calculate total amount
       const totalAmout =
@@ -138,7 +187,8 @@ export class PaymentsService {
         bookTour: { id: createPaymentDto.book_tour_id },
         currency: createPaymentDto.currency,
         payment_method: createPaymentDto.payment_method,
-        amount: totalAmout
+        amount: totalAmout,
+        invoice_code: invoiceCode,
       });
       await this.paymentsRepository.save(newPayment);
 
@@ -156,6 +206,8 @@ export class PaymentsService {
           paymentPaypal = await this.payPalOrder(
             newPayment.id,
             newPayment.amount,
+            newPayment.currency,
+            createPaymentDto.exchange_rate, // Pass exchange rate from frontend
           );
           await this.paymentsRepository.update(newPayment.id, {
             redirect_url: paymentPaypal.approval_url,
@@ -174,6 +226,7 @@ export class PaymentsService {
         data: {
           id: newPayment.id,
           user_id: newPayment.user.id,
+          invoice_code: newPayment.invoice_code,
           book_tour_id: newPayment.bookTour.id,
           total_tourists: findTourist.data.tourists.length,
           amount: newPayment.amount,
@@ -247,11 +300,11 @@ export class PaymentsService {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
-
-  async handleWebhook(payload: any): Promise<PaymentResponse> {
+  // handle webhook
+  async handleWebhook(payload: any): Promise<PaymentResponse | any> {
     try {
       const eventType = payload.event_type;
-      this.logger.info(`Received PayPal Webhook: ${eventType}`);
+      this.logger.debug(`Received PayPal Webhook: ${eventType}`);
       this.logger.debug(`Webhook payload: ${JSON.stringify(payload)}`);
 
       // TODO: Verify webhook signature using headers
@@ -267,7 +320,7 @@ export class PaymentsService {
           orderId =
             payload.resource?.supplementary_data?.related_ids?.order_id ||
             payload.resource?.id;
-          this.logger.info(
+          this.logger.debug(
             `Processing PAYMENT.CAPTURE.COMPLETED for order: ${orderId}`,
           );
           break;
@@ -275,7 +328,7 @@ export class PaymentsService {
         case 'CHECKOUT.ORDER.APPROVED':
           // Extract order ID from order approved event
           orderId = payload.resource?.id;
-          this.logger.info(
+          this.logger.debug(
             `Processing CHECKOUT.ORDER.APPROVED for order: ${orderId}`,
           );
           break;
@@ -283,35 +336,35 @@ export class PaymentsService {
         case 'CHECKOUT.ORDER.COMPLETED':
           // Extract order ID from order completed event
           orderId = payload.resource?.id;
-          this.logger.info(
+          this.logger.debug(
             `Processing CHECKOUT.ORDER.COMPLETED for order: ${orderId}`,
           );
           break;
 
         default:
           this.logger.warn(`Unhandled webhook event type: ${eventType}`);
-          return;
+          return { message: 'Webhook event ignored', data: null };
       }
 
       if (!orderId) {
         this.logger.error('Could not extract order ID from webhook payload');
-        return;
+        return { message: 'Order ID not found in webhook', data: null };
       }
 
       // Find payment by transaction ID (PayPal order ID)
       const payment = await this.paymentsRepository.findOne({
         where: { transactionId: orderId },
-        relations: ['bookTour'],
+        relations: ['bookTour', 'user'],
       });
 
       if (!payment) {
         this.logger.warn(`Payment not found for order ID: ${orderId}`);
-        return;
+        return { message: 'Payment not found', data: null };
       }
 
       // Only update if payment is not already successful
       if (payment.status !== PaymentStatus.SUCCES) {
-        this.logger.info(
+        this.logger.debug(
           `Updating payment ${payment.id} status to SUCCESS for order ${orderId}`,
         );
 
@@ -332,13 +385,46 @@ export class PaymentsService {
           StatusBookTour.ONGOING,
         );
 
-        this.logger.info(
+        this.logger.debug(
           `Successfully processed webhook for payment ${payment.id}`,
         );
+
+        return {
+          message: 'Webhook processed successfully',
+          data: {
+            id: payment.id,
+            user_id: payment.user?.id || '',
+            book_tour_id: payment.bookTour.id,
+            amount: payment.amount,
+            currency: payment.currency,
+            status: PaymentStatus.SUCCES,
+            payment_method: payment.payment_method,
+            payer_email: payerEmail,
+            transaction_id: orderId,
+            created_at: payment.created_at,
+            updated_at: new Date(),
+          },
+        };
       } else {
-        this.logger.info(
+        this.logger.debug(
           `Payment ${payment.id} already marked as successful, skipping update`,
         );
+        return {
+          message: 'Payment already processed',
+          data: {
+            id: payment.id,
+            user_id: payment.user?.id || '',
+            book_tour_id: payment.bookTour.id,
+            amount: payment.amount,
+            currency: payment.currency,
+            status: payment.status,
+            payment_method: payment.payment_method,
+            payer_email: payment.payer_email,
+            transaction_id: orderId,
+            created_at: payment.created_at,
+            updated_at: payment.updated_at,
+          },
+        };
       }
     } catch (error) {
       this.logger.error(
@@ -350,12 +436,102 @@ export class PaymentsService {
     }
   }
 
-  findAll() {
-    return `This action returns all payments`;
+  // find all payments
+  async findAllPayments(userId: string): Promise<PaymentResponse> {
+    try {
+      this.logger.debug(`Attempting to find all payments for user: ${userId}`);
+      const payments = await this.paymentsRepository.find({
+        where: { user: { id: userId } },
+        relations: ['bookTour', 'user'],
+      });
+
+      this.logger.debug(`Found ${payments?.length || 0} payments in database`);
+      if (payments?.length > 0) {
+        this.logger.debug(
+          `First payment sample: ${JSON.stringify(payments[0])}`,
+        );
+      }
+
+      if (!payments || payments.length === 0) {
+        this.logger.warn('No payments found for this user/system');
+        // Return empty array instead of throwing 404 to avoid frontend error state
+        return {
+          message: 'No payments found',
+          datas: [],
+        };
+      }
+
+      this.logger.debug('Successfully retrieved and mapped payments');
+
+      return {
+        message: 'Success find all payments',
+        datas: payments.map((payment) => ({
+          id: payment.id,
+          user_id: payment.user?.id || '',
+          invoice_code: payment.invoice_code,
+          book_tour_id: payment.bookTour?.id || '',
+          total_tourists: payment.total_tourists,
+          amount: payment.amount,
+          currency: payment.currency,
+          transaction_id: payment.transactionId,
+          payment_method: payment.payment_method,
+          payer_email: payment.payer_email,
+          redirect_url: payment.redirect_url,
+          status: payment.status,
+          created_at: payment.created_at,
+          updated_at: payment.updated_at,
+        })),
+      };
+    } catch (error) {
+      this.logger.error(`Error find all payment: ${error.message}`);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
-  findOne(id: string) {
-    return `This action returns a #${id} payment`;
+  // find one payment
+  async findOnePayment(id: string): Promise<PaymentResponse> {
+    try {
+      const payment = await this.paymentsRepository.findOne({
+        where: { id },
+        relations: ['bookTour'],
+      });
+
+      if (!payment) {
+        this.logger.warn(`Payment not found for id: ${id}`);
+        throw new HttpException('Payment not found', HttpStatus.NOT_FOUND);
+      }
+
+      this.logger.debug(`Success find payment for id: ${id}`);
+
+      return {
+        message: 'Success find payment',
+        data: {
+          id: payment.id,
+          user_id: payment.user?.id,
+          invoice_code: payment.invoice_code,
+          book_tour_id: payment.bookTour.id,
+          total_tourists: payment.total_tourists,
+          amount: payment.amount,
+          currency: payment.currency,
+          transaction_id: payment.transactionId,
+          payment_method: payment.payment_method,
+          payer_email: payment.payer_email,
+          redirect_url: payment.redirect_url,
+          status: payment.status,
+          created_at: payment.created_at,
+          updated_at: payment.updated_at,
+        },
+      };
+    } catch (error) {
+      this.logger.error(`Error find payment for id: ${error.message}`);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   update(id: string) {

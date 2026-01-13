@@ -557,6 +557,81 @@ export class DestinationService {
     }
   }
 
+  // find destination by slug
+  // find destination by slug
+  async findDestinationBySlug(slug: string): Promise<ResponseDestination> {
+    try {
+      const translation = await this.destinationTranslationRepository.findOne({
+        where: {
+          slug: slug,
+        },
+        relations: [
+          'destination',
+          'destination.state',
+          'destination.state.country',
+          'destination.category_destination',
+          'destination.translations',
+        ],
+      });
+
+      if (!translation) {
+        this.logger.error('Destination translation not found');
+        throw new HttpException('Destination not found', HttpStatus.NOT_FOUND);
+      }
+
+      const findDestination = translation.destination;
+
+      this.logger.debug(`Find destination by slug successfully`);
+
+      return {
+        message: 'Find destination by slug successfully',
+        data: {
+          id: findDestination.id,
+          state_id: findDestination?.state?.id,
+          location: `${findDestination?.state?.name}, ${findDestination?.state?.country?.name}`,
+          category_destination_id: findDestination?.category_destination?.id,
+          price: findDestination.price,
+          country_id: findDestination?.state?.country?.id,
+          translations: findDestination.translations?.map((item) => ({
+            id: item.id,
+            destination_id: findDestination.id,
+            language_code: item.language_code,
+            name: item.name,
+            slug: item.slug,
+            description: item.description,
+            thumbnail: item.thumbnail,
+            image: item.image,
+            detail_tour: item.detail_tour,
+            facilities: item.facilities,
+            createdAt: item.createdAt,
+            updatedAt: item.updatedAt,
+          })),
+        },
+      };
+    } catch (error) {
+      this.logger.error(
+        `Find destination by slug error: ${error.message}`,
+        error.stack,
+      );
+
+      if (error instanceof HttpException) {
+        throw error;
+      }
+
+      throw new HttpException(
+        {
+          Error: [
+            {
+              field: 'general',
+              body: 'Error during find destination by slug',
+            },
+          ],
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
   // find destination by id
   async findDestinationById(
     destinationId: string,

@@ -3,7 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  Headers,
   HttpCode,
   HttpStatus,
   Param,
@@ -12,6 +11,7 @@ import {
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { CurrentUser } from 'src/common/decorators/user.decorator';
 import { PaymentResponse } from 'src/types/response/payment.type';
+import { WebResponse } from 'src/types/response/response.type';
 import { CreatePaymentDto } from './dto/create-payment.dto';
 import { PaymentsService } from './payments.service';
 
@@ -49,27 +49,33 @@ export class PaymentsController {
 
   @Post('webhook')
   @HttpCode(HttpStatus.OK)
-  async webhook(
-    @Body() payload: any,
-  ): Promise<{ message: string }> {
+  async webhook(@Body() payload: any): Promise<WebResponse> {
     const result = await this.paymentsService.handleWebhook(payload);
     return {
-      message: result.message,
+      message: result.message || 'Webhook received',
     };
   }
 
   @Roles('traveller')
-  @Get()
+  @Get('find-all')
   @HttpCode(HttpStatus.OK)
-  findAll() {
-    return this.paymentsService.findAll();
+  async findAll(@CurrentUser() user: any): Promise<WebResponse> {
+    const result = await this.paymentsService.findAllPayments(user.id);
+    return {
+      message: result.message,
+      data: result.datas,
+    };
   }
 
-  @Roles('admin', 'owner')
+  @Roles('admin', 'owner', 'traveller')
   @Get(':id')
   @HttpCode(HttpStatus.OK)
-  findOne(@Param('id') id: string) {
-    return this.paymentsService.findOne(id);
+  async findOne(@Param('id') id: string): Promise<WebResponse> {
+    const result = await this.paymentsService.findOnePayment(id);
+    return {
+      message: result.message,
+      data: result.data,
+    };
   }
 
   @Roles('owner')
