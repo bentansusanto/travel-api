@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { Logger } from 'winston';
 import { BookToursService } from '../book-tours/book-tours.service';
 import { StatusBookTour } from '../book-tours/entities/book-tour.entity';
+import { SalesService } from '../sales/sales.service';
 import { TouristsService } from '../tourists/tourists.service';
 import { UsersService } from '../users/users.service';
 import { CreatePaymentDto } from './dto/create-payment.dto';
@@ -25,6 +26,7 @@ export class PaymentsService {
     private readonly usersService: UsersService,
     private readonly paypalService: PaypalService,
     private readonly touristService: TouristsService,
+    private readonly salesService: SalesService,
     @InjectRepository(Payment)
     private readonly paymentsRepository: Repository<Payment>,
   ) {}
@@ -276,6 +278,14 @@ export class PaymentsService {
         StatusBookTour.ONGOING,
       );
 
+      // Create sales record
+      await this.salesService.createSaleFromPayment({
+        payment_id: payment.id,
+        book_tour_id: payment.bookTour.id,
+        amount: payment.amount,
+        currency: payment.currency,
+      });
+
       return {
         message: 'Success capturing payment',
         data: {
@@ -384,6 +394,15 @@ export class PaymentsService {
           payment.bookTour.id,
           StatusBookTour.ONGOING,
         );
+
+        // Create sales record
+        await this.salesService.createSaleFromPayment({
+          id: payment.id,
+          book_tour_id: payment.bookTour.id,
+          amount: payment.amount,
+          currency: payment.currency,
+          payment_method: payment.payment_method,
+        });
 
         this.logger.debug(
           `Successfully processed webhook for payment ${payment.id}`,
