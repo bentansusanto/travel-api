@@ -9,6 +9,7 @@ import { SeedsModule } from './modules/seeds/seeds.module';
 import { TouristsModule } from './modules/tourists/tourists.module';
 import { UsersModule } from './modules/users/users.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { SalesModule } from './modules/sales/sales.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
     BookToursModule,
     TouristsModule,
     PaymentsModule,
+    SalesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
