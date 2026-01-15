@@ -11,6 +11,7 @@ import { BookToursService } from '../book-tours/book-tours.service';
 import { CreateManyTouristsDto } from './dto/create-many-tourists.dto';
 import { CreateTouristDto, UpdateTouristDto } from './dto/create-tourist.dto';
 import { Tourist } from './entities/tourist.entity';
+import { StatusBookTour } from '../book-tours/entities/book-tour.entity';
 
 @Injectable()
 export class TouristsService {
@@ -98,18 +99,25 @@ export class TouristsService {
         );
       }
 
-      // 2. Check if any of these passorts already exist in the database
+      // 2. Check if any of these passports already exist in ACTIVE bookings
+      // (exclude completed and cancelled bookings to allow passport reuse)
       const existingTouristsWithPassport = await this.touristRepository.find({
         where: passports.map((p) => ({ passport_number: p })),
-        select: ['passport_number'],
+        relations: ['bookTour'],
       });
 
-      if (existingTouristsWithPassport.length > 0) {
-        const found = existingTouristsWithPassport.map(
-          (t) => t.passport_number,
-        );
+      // Filter to only include tourists from active bookings
+      const activeBookingTourists = existingTouristsWithPassport.filter(
+        (t) =>
+          t.bookTour &&
+          t.bookTour.status !== StatusBookTour.COMPLETED &&
+          t.bookTour.status !== StatusBookTour.CANCELLED,
+      );
+
+      if (activeBookingTourists.length > 0) {
+        const found = activeBookingTourists.map((t) => t.passport_number);
         throw new HttpException(
-          `Passport numbers already registered: ${found.join(', ')}`,
+          `Passport numbers already registered in active bookings: ${found.join(', ')}`,
           HttpStatus.CONFLICT,
         );
       }

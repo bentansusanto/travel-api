@@ -233,6 +233,7 @@ export class PaymentsService {
           total_tourists: findTourist.data.tourists.length,
           amount: newPayment.amount,
           currency: newPayment.currency,
+          service_type: newPayment.service_type,
           status: newPayment.status,
           payment_method: newPayment.payment_method,
           payer_email: paymentPaypal?.payer_email || null,
@@ -294,6 +295,7 @@ export class PaymentsService {
           book_tour_id: payment.bookTour.id,
           amount: payment.amount,
           currency: payment.currency,
+          service_type: payment.service_type,
           status: PaymentStatus.SUCCES,
           payment_method: payment.payment_method,
           payer_email: capture.payerEmail,
@@ -492,6 +494,7 @@ export class PaymentsService {
           total_tourists: payment.total_tourists,
           amount: payment.amount,
           currency: payment.currency,
+          service_type: payment.service_type,
           transaction_id: payment.transactionId,
           payment_method: payment.payment_method,
           payer_email: payment.payer_email,
@@ -515,7 +518,17 @@ export class PaymentsService {
     try {
       const payment = await this.paymentsRepository.findOne({
         where: { id },
-        relations: ['bookTour'],
+        relations: [
+          'user',
+          'bookTour',
+          'bookTour.book_tour_items',
+          'bookTour.book_tour_items.destination',
+          'bookTour.book_tour_items.destination.translations',
+          'bookTour.book_tour_items.destination.state',
+          'bookTour.book_tour_items.destination.state.country',
+          'bookTour.tourists',
+          'bookTour.country',
+        ],
       });
 
       if (!payment) {
@@ -530,11 +543,69 @@ export class PaymentsService {
         data: {
           id: payment.id,
           user_id: payment.user?.id,
+          user: payment.user
+            ? {
+                id: payment.user.id,
+                name: payment.user.name,
+                email: payment.user.email,
+              }
+            : null,
           invoice_code: payment.invoice_code,
-          book_tour_id: payment.bookTour.id,
+          book_tour_id: payment.bookTour?.id,
+          book_tour: payment.bookTour
+            ? {
+                id: payment.bookTour.id,
+                subtotal: payment.bookTour.subtotal,
+                status: payment.bookTour.status,
+                country: payment.bookTour.country
+                  ? {
+                      id: payment.bookTour.country.id,
+                      name: payment.bookTour.country.name,
+                    }
+                  : null,
+                book_tour_items: payment.bookTour.book_tour_items
+                  ? payment.bookTour.book_tour_items.map((item) => {
+                      // Get Indonesian translation (default to first translation if not found)
+                      const translation =
+                        item.destination?.translations?.find(
+                          (t) => t.language_code === 'id',
+                        ) || item.destination?.translations?.[0];
+
+                      return {
+                        id: item.id,
+                        visit_date: item.visit_date,
+                        destination: item.destination
+                          ? {
+                              id: item.destination.id,
+                              price: item.destination.price,
+                              name: translation?.name || '',
+                              description: translation?.description || '',
+                              detail_tour: translation?.detail_tour || [],
+                              thumbnail: translation?.thumbnail || '',
+                              location: item.destination.state
+                                ? `${item.destination.state.name}, ${item.destination.state.country?.name || ''}`
+                                : '',
+                            }
+                          : null,
+                      };
+                    })
+                  : [],
+                tourists: payment.bookTour.tourists
+                  ? payment.bookTour.tourists.map((tourist) => ({
+                      id: tourist.id,
+                      name: tourist.name,
+                      gender: tourist.gender,
+                      phone_number: tourist.phone_number,
+                      nationality: tourist.nationality,
+                      passport_number: tourist.passport_number,
+                    }))
+                  : [],
+              }
+            : null,
           total_tourists: payment.total_tourists,
           amount: payment.amount,
           currency: payment.currency,
+          service_type: payment.service_type,
           transaction_id: payment.transactionId,
           payment_method: payment.payment_method,
           payer_email: payment.payer_email,
@@ -546,6 +617,65 @@ export class PaymentsService {
       };
     } catch (error) {
       this.logger.error(`Error find payment for id: ${error.message}`);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  // find all payment users
+  async finAllPaymentUser(): Promise<PaymentResponse> {
+    try {
+      const payments = await this.paymentsRepository.find({
+        relations: ['user', 'bookTour', 'bookTour.book_tour_items'],
+      });
+
+      if (!payments || payments.length === 0) {
+        this.logger.warn('No payments found for this user/system');
+        return {
+          message: 'No payments found',
+          datas: [],
+        };
+      }
+
+      this.logger.debug('Successfully retrieved and mapped payments');
+
+      return {
+        message: 'Success find all payment users',
+        datas: payments.map((payment) => ({
+          id: payment.id,
+          user_id: payment.user?.id,
+          user: payment.user
+            ? {
+                id: payment.user.id,
+                name: payment.user.name,
+                email: payment.user.email,
+              }
+            : null,
+          invoice_code: payment.invoice_code,
+          book_tour_id: payment.bookTour?.id,
+          book_tour: payment.bookTour
+            ? {
+                id: payment.bookTour.id,
+                book_tour_items: payment.bookTour.book_tour_items || [],
+              }
+            : null,
+          total_tourists: payment.total_tourists,
+          amount: payment.amount,
+          currency: payment.currency,
+          service_type: payment.service_type,
+          transaction_id: payment.transactionId,
+          payment_method: payment.payment_method,
+          payer_email: payment.payer_email,
+          redirect_url: payment.redirect_url,
+          status: payment.status,
+          created_at: payment.created_at,
+          updated_at: payment.updated_at,
+        })),
+      };
+    } catch (error) {
+      this.logger.error(`Error find all payment user: ${error.message}`);
       if (error instanceof HttpException) {
         throw error;
       }
