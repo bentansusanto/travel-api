@@ -52,9 +52,7 @@ export class Tourist {
   @Column()
   nationality: string;
 
-  @Column({
-    unique: true,
-  })
+  @Column()
   passport_number: string;
 
   @Column()

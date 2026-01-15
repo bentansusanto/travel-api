@@ -20,6 +20,7 @@ export enum StatusBookTour {
   CONFIRMED = 'confirmed',
   ONGOING = 'ongoing',
   COMPLETED = 'completed',
+  CANCELLED = 'cancelled',
 }
 
 @Entity()

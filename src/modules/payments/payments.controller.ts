@@ -67,6 +67,17 @@ export class PaymentsController {
     };
   }
 
+  @Roles('admin', 'owner')
+  @Get('find-all-payment-user')
+  @HttpCode(HttpStatus.OK)
+  async findAllPaymentUser(): Promise<WebResponse> {
+    const result = await this.paymentsService.finAllPaymentUser();
+    return {
+      message: result.message,
+      data: result.datas,
+    };
+  }
+
   @Roles('admin', 'owner', 'traveller')
   @Get(':id')
   @HttpCode(HttpStatus.OK)

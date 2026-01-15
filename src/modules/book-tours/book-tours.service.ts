@@ -57,14 +57,19 @@ export class BookToursService {
         );
       }
 
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const now = new Date();
+      // Reset to start of day (00:00:00) using local time components to ensure accurate "today" comparison
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-      const newVisitDate = new Date(createBookTourDto.visit_date);
-      const newVisitDateStart = new Date(newVisitDate);
-      newVisitDateStart.setHours(0, 0, 0, 0);
+      const visitDate = new Date(createBookTourDto.visit_date);
+      // Reset to start of day (00:00:00) using date components
+      const newVisitDateStart = new Date(
+        visitDate.getFullYear(),
+        visitDate.getMonth(),
+        visitDate.getDate(),
+      );
 
-      // 1. Check if visit date is earlier than today
+      // 1. Check if visit date is earlier than today (allow today, disallow yesterday)
       if (newVisitDateStart < today) {
         throw new HttpException(
           'Visit date cannot be earlier than today',
@@ -72,26 +77,8 @@ export class BookToursService {
         );
       }
 
-      // 2. Check if visit date is earlier than any previous booking for this user
-      const lastBookingItem = await this.bookTourItemsRepository.findOne({
-        where: { book_tour: { user: { id: findUser.id } } },
-        order: { visit_date: 'DESC' },
-        relations: ['book_tour', 'book_tour.user'],
-      });
-
-      if (lastBookingItem) {
-        const lastVisitDate = new Date(lastBookingItem.visit_date);
-        lastVisitDate.setHours(0, 0, 0, 0);
-
-        if (newVisitDateStart < lastVisitDate) {
-          throw new HttpException(
-            'Visit date cannot be earlier than your previous booking (' +
-              lastBookingItem.visit_date +
-              ')',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-      }
+      // Sequential booking check (Check #2) has been removed to allow booking for "today"
+      // even if there are future active bookings, per user request.
 
       // 2. Check if there's an existing DRAFT or PENDING book tour for the SAME country
       let bookTour = await this.bookTourRepository.findOne({
@@ -129,7 +116,7 @@ export class BookToursService {
       const bookTourItem = this.bookTourItemsRepository.create({
         book_tour: { id: bookTour.id },
         destination: { id: findDestination.data.id },
-        visit_date: newVisitDate,
+        visit_date: visitDate,
         created_at: new Date(),
         updated_at: new Date(),
       });
@@ -232,6 +219,9 @@ export class BookToursService {
           'book_tour_items.destination.state',
           'book_tour_items.destination.state.country',
         ],
+        order: {
+          created_at: 'DESC',
+        },
       });
 
       if (bookTours.length === 0) {
@@ -376,11 +366,65 @@ export class BookToursService {
     }
   }
   // update status book tour
-  async updateStatusBookTour(id: string, status: StatusBookTour) {
+  async updateStatusBookTour(
+    id: string,
+    status: StatusBookTour,
+  ): Promise<TourResponse> {
     try {
+      // check book tour is exists
+      const bookTour = await this.bookTourRepository.findOne({
+        where: { id },
+        relations: [
+          'book_tour_items',
+          'user',
+          'country',
+          'book_tour_items.destination',
+          'book_tour_items.destination.translations',
+          'book_tour_items.destination.state',
+          'book_tour_items.destination.state.country',
+        ],
+      });
+      if (!bookTour) {
+        this.logger.error('Book tour not found');
+        throw new HttpException('Book tour not found', HttpStatus.NOT_FOUND);
+      }
       await this.bookTourRepository.update(id, {
         status: status,
       });
+      return {
+        message: 'Success update book tour',
+        data: {
+          id: bookTour.id,
+          user_id: bookTour.user.id,
+          country_id: bookTour.country.id,
+          status: bookTour.status,
+          subtotal: bookTour.subtotal,
+          created_at: bookTour.created_at,
+          updated_at: bookTour.updated_at,
+          book_tour_items: bookTour.book_tour_items.map((item) => ({
+            id: item.id,
+            destination_id: item.destination.id,
+            destination: {
+              id: item.destination.id,
+              location: `${item.destination?.state?.name}, ${item.destination?.state?.country?.name}`,
+              price: item.destination.price,
+              translations: (item.destination.translations || []).map((t) => ({
+                id: t.id,
+                language_code: t.language_code,
+                name: t.name,
+                slug: t.slug,
+                description: t.description,
+                thumbnail: t.thumbnail,
+                image: t.image,
+                detail_tour: t.detail_tour,
+                facilities: t.facilities,
+              })),
+            },
+            visit_date: item.visit_date,
+            created_at: item.created_at,
+          })),
+        },
+      };
     } catch (error) {
       this.logger.error(`Error during update book tour: ${error.message}`);
       throw new HttpException(

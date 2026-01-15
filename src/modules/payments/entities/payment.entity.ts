@@ -25,6 +25,14 @@ export enum PaymentStatus {
   FAILED = 'failed',
 }
 
+export enum ServiceType {
+  TOUR = 'tour',
+  RENT_MOTOR = 'rent_motor',
+  ENTERTAINMENT = 'entertainment',
+  HOTEL = 'hotel',
+  FLIGHT = 'flight',
+}
+
 @Entity('payments')
 export class Payment {
   @PrimaryColumn()
@@ -61,6 +69,13 @@ export class Payment {
 
   @Column()
   currency: string;
+
+  @Column({
+    type: 'enum',
+    enum: ServiceType,
+    default: ServiceType.TOUR,
+  })
+  service_type: ServiceType;
 
   @Column({
     type: 'enum',

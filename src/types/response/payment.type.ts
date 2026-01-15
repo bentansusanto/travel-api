@@ -3,11 +3,14 @@ import { ResponseModel } from './response.type';
 export class PaymentData {
   id: string;
   user_id: string;
+  user?: any; // User details object
   book_tour_id?: string;
+  book_tour?: any; // BookTour details with items and tourists
   total_tourists?: number;
   invoice_code?: string;
   amount: number;
   currency: string;
+  service_type?: string;
   transaction_id?: string;
   payment_method: string;
   payer_email?: string;
