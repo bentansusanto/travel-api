@@ -19,6 +19,7 @@ import { BookTourItems } from 'src/modules/book-tours/entities/book-tour-items.e
 import { Tourist } from 'src/modules/tourists/entities/tourist.entity';
 import { Payment } from 'src/modules/payments/entities/payment.entity';
 import { Sale } from 'src/modules/sales/entities/sale.entity';
+import { Profile } from 'src/modules/users/entities/profile.entity';
 
 @Global()
 @Module({
@@ -65,6 +66,7 @@ import { Sale } from 'src/modules/sales/entities/sale.entity';
       Tourist,
       Payment,
       Sale,
+      Profile,
     ]),
     ThrottlerModule.forRoot([
       {

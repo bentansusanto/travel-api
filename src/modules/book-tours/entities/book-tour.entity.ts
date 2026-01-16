@@ -13,6 +13,7 @@ import {
 import { BookTourItems } from './book-tour-items.entity';
 import { Tourist } from 'src/modules/tourists/entities/tourist.entity';
 import { Payment } from 'src/modules/payments/entities/payment.entity';
+import { State } from 'src/modules/country/entities/state.entity';
 
 export enum StatusBookTour {
   DRAFT = 'draft',
@@ -42,6 +43,10 @@ export class BookTour {
   @ManyToOne(() => Country, (country) => country.book_tours)
   @JoinColumn({ name: 'country_id' })
   country: Country;
+
+  @ManyToOne(() => State, (state) => state.bookTours)
+  @JoinColumn({ name: 'state_id' })
+  state: State;
 
   @OneToMany(() => BookTourItems, (bookTourItems) => bookTourItems.book_tour)
   book_tour_items: BookTourItems[];

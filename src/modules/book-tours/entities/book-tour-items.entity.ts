@@ -31,7 +31,7 @@ export class BookTourItems {
   destination: Destination;
 
   @Column({
-    type: 'date',
+    type: 'datetime',
   })
   visit_date: Date;
 

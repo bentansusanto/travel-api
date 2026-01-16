@@ -7,12 +7,14 @@ import {
   JoinColumn,
   ManyToOne,
   OneToMany,
+  OneToOne,
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { Roles } from './role.entity';
 import { Session } from './session.entity';
 import { Payment } from 'src/modules/payments/entities/payment.entity';
+import { Profile } from './profile.entity';
 
 @Entity('users')
 export class User {
@@ -73,6 +75,13 @@ export class User {
 
   @OneToMany(() => Payment, (payment) => payment.user)
   payments: Payment[];
+
+  @OneToOne(() => Profile, (profile) => profile.user, {
+    onDelete: 'CASCADE',
+    onUpdate: 'CASCADE',
+  })
+  @JoinColumn({ name: 'profile_id', referencedColumnName: 'id' })
+  profile: Profile;
 
   @CreateDateColumn()
   createdAt: Date;

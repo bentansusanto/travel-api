@@ -48,11 +48,20 @@ export class BookToursService {
       }
 
       const countryId = findDestination.data.country_id;
+      const stateId = findDestination.data.state_id;
 
       if (!countryId) {
         this.logger.error('Country not found in destination');
         throw new HttpException(
           'Country not found in destination',
+          HttpStatus.NOT_FOUND,
+        );
+      }
+
+      if (!stateId) {
+        this.logger.error('State not found in destination');
+        throw new HttpException(
+          'State not found in destination',
           HttpStatus.NOT_FOUND,
         );
       }
@@ -77,32 +86,91 @@ export class BookToursService {
         );
       }
 
-      // Sequential booking check (Check #2) has been removed to allow booking for "today"
-      // even if there are future active bookings, per user request.
-
-      // 2. Check if there's an existing DRAFT or PENDING book tour for the SAME country
+      // 2. Check if there's an existing DRAFT or PENDING book tour for the SAME country AND state
       let bookTour = await this.bookTourRepository.findOne({
         where: {
           user: { id: findUser.id },
           country: { id: countryId },
+          state: { id: stateId }, // Filter by state as well
           status: In([StatusBookTour.DRAFT, StatusBookTour.PENDING]),
         },
+        relations: ['book_tour_items'],
       });
 
       if (bookTour) {
+        // Validation: Check if there is already a booking for the same date
+        if (bookTour.book_tour_items && bookTour.book_tour_items.length > 0) {
+          // Extract date portion from the input, adjusting to Indonesian timezone (UTC+7)
+          // The frontend sends ISO timestamps representing local time
+          // We need to convert to UTC+7 before extracting the date
+          const INDONESIA_OFFSET_MS = 7 * 60 * 60 * 1000; // UTC+7 in milliseconds
+
+          const inputDate = new Date(createBookTourDto.visit_date);
+          const indonesianDate = new Date(
+            inputDate.getTime() + INDONESIA_OFFSET_MS,
+          );
+          const newYMD = indonesianDate.toISOString().split('T')[0];
+
+          this.logger.debug(
+            `[BookTour Validation] New Date Requested: ${newYMD} (Raw: ${createBookTourDto.visit_date})`,
+          );
+
+          for (const item of bookTour.book_tour_items) {
+            let itemYMD = '';
+
+            const INDONESIA_OFFSET_MS = 7 * 60 * 60 * 1000; // UTC+7
+
+            // Extract existing item dates with timezone adjustment
+            if (typeof item.visit_date === 'string') {
+              const s = String(item.visit_date);
+              if (s.length === 10 && s.includes('-')) {
+                // Already YYYY-MM-DD format, use directly
+                itemYMD = s;
+              } else {
+                // ISO timestamp, adjust to Indonesian timezone
+                const d = new Date(s);
+                const adjusted = new Date(d.getTime() + INDONESIA_OFFSET_MS);
+                itemYMD = adjusted.toISOString().split('T')[0];
+              }
+            } else if (item.visit_date instanceof Date) {
+              const adjusted = new Date(
+                item.visit_date.getTime() + INDONESIA_OFFSET_MS,
+              );
+              itemYMD = adjusted.toISOString().split('T')[0];
+            }
+
+            this.logger.debug(
+              `[BookTour Validation] Existing Item Date: ${itemYMD} (Raw: ${item.visit_date})`,
+            );
+
+            if (itemYMD === newYMD) {
+              this.logger.warn(
+                `[BookTour Validation] Collision: ${itemYMD} === ${newYMD}. Rejecting.`,
+              );
+              throw new HttpException(
+                'You already have a booking for this date',
+                HttpStatus.BAD_REQUEST,
+              );
+            }
+          }
+        }
+
         // Update updated_at and subtotal
         bookTour.updated_at = new Date();
         bookTour.subtotal =
           Number(bookTour.subtotal) + Number(findDestination.data.price);
         await this.bookTourRepository.save(bookTour);
       } else {
-        // 3. If no existing tour for this country, create a new one
+        // 3. If no existing tour for this country and state, create a new one
         bookTour = this.bookTourRepository.create({
           user: {
             id: findUser.id,
           },
           country: {
             id: countryId,
+          },
+          state: {
+            id: stateId,
           },
           status: StatusBookTour.DRAFT,
           subtotal: findDestination.data.price,
@@ -113,10 +181,18 @@ export class BookToursService {
       }
 
       // 4. Create the booking item
+      // Extract the date string to store (adjusted to Indonesian timezone UTC+7)
+      const INDONESIA_OFFSET_MS = 7 * 60 * 60 * 1000;
+      const inputDate = new Date(createBookTourDto.visit_date);
+      const indonesianDate = new Date(
+        inputDate.getTime() + INDONESIA_OFFSET_MS,
+      );
+      const visitDateToStore = indonesianDate.toISOString().split('T')[0];
+
       const bookTourItem = this.bookTourItemsRepository.create({
         book_tour: { id: bookTour.id },
         destination: { id: findDestination.data.id },
-        visit_date: visitDate,
+        visit_date: visitDateToStore as any, // Store as string YYYY-MM-DD
         created_at: new Date(),
         updated_at: new Date(),
       });
@@ -131,6 +207,7 @@ export class BookToursService {
           'book_tour_items',
           'user',
           'country',
+          'state', // Include state relation
           'book_tour_items.destination',
           'book_tour_items.destination.translations',
           'book_tour_items.destination.state',
@@ -214,6 +291,7 @@ export class BookToursService {
           'book_tour_items',
           'user',
           'country',
+          'state',
           'book_tour_items.destination',
           'book_tour_items.destination.translations',
           'book_tour_items.destination.state',
@@ -298,6 +376,7 @@ export class BookToursService {
           'book_tour_items',
           'user',
           'country',
+          'state',
           'book_tour_items.destination',
           'book_tour_items.destination.translations',
           'book_tour_items.destination.state',
@@ -378,6 +457,7 @@ export class BookToursService {
           'book_tour_items',
           'user',
           'country',
+          'state',
           'book_tour_items.destination',
           'book_tour_items.destination.translations',
           'book_tour_items.destination.state',
