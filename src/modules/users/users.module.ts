@@ -8,6 +8,7 @@ import { User } from './entities/user.entity';
 import { SessionsModule } from './sessions/sessions.module';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
+import { ProfilesModule } from './profiles/profiles.module';
 
 @Module({
   controllers: [UsersController],
@@ -17,6 +18,7 @@ import { UsersService } from './users.service';
     LoggerModule,
     SessionsModule,
     TypeOrmModule.forFeature([User, Session, Roles]),
+    ProfilesModule,
   ],
   exports: [UsersService],
 })

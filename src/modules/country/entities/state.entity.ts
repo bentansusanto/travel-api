@@ -11,6 +11,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Country } from './country.entity';
+import { BookTour } from 'src/modules/book-tours/entities/book-tour.entity';
 
 @Entity('states')
 export class State {
@@ -33,6 +34,9 @@ export class State {
 
   @OneToMany(() => Destination, (destination) => destination.state)
   destinations: Destination[];
+
+  @OneToMany(() => BookTour, (bookTour) => bookTour.state)
+  bookTours: BookTour[];
 
   @Column()
   latitude: string;
