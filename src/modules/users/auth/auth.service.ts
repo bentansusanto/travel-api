@@ -38,12 +38,31 @@ export class AuthService {
   // register user
   async register(userDto: RegisterDto): Promise<AuthResponse> {
     try {
-      // check if role exists
-      const role = await this.usersService.findRoleById(userDto.role_id);
-      if (!role) {
-        this.logger.error('Role not found');
-        throw new HttpException('Role not found', HttpStatus.BAD_REQUEST);
+      let role: any;
+
+      // If role_id is provided, use it. Otherwise, auto-assign role based on site
+      if (userDto.role_id) {
+        role = await this.usersService.findRoleById(userDto.role_id);
+        if (!role) {
+          this.logger.error('Role not found');
+          throw new HttpException('Role not found', HttpStatus.BAD_REQUEST);
+        }
+      } else {
+        // Auto-assign role based on site
+        const targetRoleCode = userDto.site === 'admin' ? 'owner' : 'traveller';
+        role = await this.usersService.findRoleByCode(targetRoleCode);
+
+        if (!role) {
+          this.logger.error(`${targetRoleCode} role not found in database`);
+          throw new HttpException(
+            `${targetRoleCode} role not found. Please contact administrator.`,
+            HttpStatus.INTERNAL_SERVER_ERROR,
+          );
+        }
+        // Set role_id for user creation
+        userDto.role_id = role.id;
       }
+
       // check if role allows self register
       if (role.self_register === false) {
         this.logger.error(
@@ -248,6 +267,31 @@ export class AuthService {
         throw new HttpException('Invalid password', HttpStatus.BAD_REQUEST);
       }
 
+      // Check if user has correct role based on site
+      if (reqDto.site === 'admin') {
+        // Admin site: Disallow traveller role
+        if (user.role?.code === 'traveller') {
+          this.logger.error(
+            `Login denied: User with traveller role attempted admin login`,
+          );
+          throw new HttpException(
+            'Access denied. Traveller accounts cannot login to admin panel.',
+            HttpStatus.FORBIDDEN,
+          );
+        }
+      } else {
+        // Traveller site (default): Only allow traveller role
+        if (user.role?.code !== 'traveller') {
+          this.logger.error(
+            `Login denied: User role is ${user.role?.code}, expected traveller`,
+          );
+          throw new HttpException(
+            'Access denied user expected traveller',
+            HttpStatus.FORBIDDEN,
+          );
+        }
+      }
+
       // generate token
       const token = crypto.randomBytes(100).toString('hex').toUpperCase();
       const accessTokenExpiresAt = new Date();
@@ -345,7 +389,7 @@ export class AuthService {
             id: user.role?.id,
             name: user.role?.name,
             code: user.role?.code,
-          }
+          },
         },
       };
     } catch (error) {

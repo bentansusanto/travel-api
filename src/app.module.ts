@@ -10,6 +10,7 @@ import { TouristsModule } from './modules/tourists/tourists.module';
 import { UsersModule } from './modules/users/users.module';
 import { PaymentsModule } from './modules/payments/payments.module';
 import { SalesModule } from './modules/sales/sales.module';
+import { RolesModule } from './modules/users/roles/roles.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { SalesModule } from './modules/sales/sales.module';
     TouristsModule,
     PaymentsModule,
     SalesModule,
+    RolesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
