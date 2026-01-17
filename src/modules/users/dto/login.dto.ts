@@ -1,4 +1,11 @@
-import { IsEmail, IsNotEmpty, Matches, MinLength } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  MinLength,
+} from 'class-validator';
 
 export class LoginDto {
   @IsNotEmpty({ message: 'Email is required' })
@@ -20,4 +27,8 @@ export class LoginDto {
     message: 'Password must contain at least one special character',
   })
   password: string;
+
+  @IsOptional()
+  @IsString({ message: 'Site must be a string' })
+  site?: string;
 }

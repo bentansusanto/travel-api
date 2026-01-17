@@ -35,18 +35,26 @@ export class UsersService {
       const tokenVerify = `${tokens}-${Date.now()}`;
 
       const hashPassword = await bcrypt.hash(createUserDto.password, 10);
-      const newUser = this.userRepository.create({
+
+      const userData: any = {
         id: this.hashIds.encode(Date.now()),
-        ...createUserDto,
-        role: {
-          id: createUserDto.role_id,
-        },
+        name: createUserDto.name,
+        email: createUserDto.email,
         password: hashPassword,
         verify_code: tokenVerify,
         verify_code_expires_at: new Date(Date.now() + 60 * 60 * 1000),
-      });
+      };
 
-      const savedUser = await this.userRepository.save(newUser);
+      // Only set role if role_id is provided
+      if (createUserDto.role_id) {
+        userData.role = { id: createUserDto.role_id };
+      }
+
+      const newUser = this.userRepository.create(userData);
+
+      const savedUser = (await this.userRepository.save(
+        newUser,
+      )) as unknown as User;
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password, ...result } = savedUser;
       return result;
@@ -195,6 +203,17 @@ export class UsersService {
       return role;
     } catch (error) {
       this.logger.error('Error finding role:', error);
+      throw error;
+    }
+  }
+
+  // find role by code
+  async findRoleByCode(code: string): Promise<Roles> {
+    try {
+      const role = await this.roleRepository.findOneBy({ code });
+      return role;
+    } catch (error) {
+      this.logger.error('Error finding role by code:', error);
       throw error;
     }
   }

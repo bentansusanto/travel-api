@@ -9,6 +9,7 @@ import { SessionsModule } from './sessions/sessions.module';
 import { UsersController } from './users.controller';
 import { UsersService } from './users.service';
 import { ProfilesModule } from './profiles/profiles.module';
+import { RolesModule } from './roles/roles.module';
 
 @Module({
   controllers: [UsersController],
@@ -19,6 +20,7 @@ import { ProfilesModule } from './profiles/profiles.module';
     SessionsModule,
     TypeOrmModule.forFeature([User, Session, Roles]),
     ProfilesModule,
+    RolesModule,
   ],
   exports: [UsersService],
 })

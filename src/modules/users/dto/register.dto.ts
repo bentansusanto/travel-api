@@ -1,6 +1,7 @@
 import {
   IsEmail,
   IsNotEmpty,
+  IsOptional,
   IsString,
   Matches,
   MinLength,
@@ -32,7 +33,11 @@ export class RegisterDto {
   })
   password: string;
 
-  @IsNotEmpty({ message: 'Role ID is required' })
+  @IsOptional()
   @IsString({ message: 'Role ID must be a string' })
-  role_id: string;
+  role_id?: string;
+
+  @IsOptional()
+  @IsString({ message: 'Site must be a string' })
+  site?: string;
 }
