@@ -1,0 +1,110 @@
+version: '3.8'
+
+services:
+  travel_mysql:
+    image: mysql:8.0
+    container_name: travel_mysql_prod
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DATABASE_NAME}
+      MYSQL_USER: ${DATABASE_USER}
+      MYSQL_PASSWORD: ${DATABASE_PASSWORD}
+    # MySQL optimization for shared VPS
+    command:
+      - --max_connections=100
+      - --innodb_buffer_pool_size=512M
+      - --innodb_log_file_size=128M
+      - --query_cache_size=32M
+      - --tmp_table_size=32M
+      - --max_heap_table_size=32M
+      - --innodb_flush_log_at_trx_commit=2
+      - --innodb_flush_method=O_DIRECT
+    volumes:
+      - travel-mysql-data:/var/lib/mysql
+      - ./mysql-init:/docker-entrypoint-initdb.d
+    networks:
+      - travel-network
+    # Resource limits to prevent memory hogging
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 768M
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'mysqladmin',
+          'ping',
+          '-h',
+          'localhost',
+          '-u',
+          'root',
+          '-p${MYSQL_ROOT_PASSWORD}',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  travel_api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: travel_api_prod
+    restart: unless-stopped
+    ports:
+      # Bind to localhost only for security (access via reverse proxy)
+      - '127.0.0.1:${PORT}:${PORT}'
+    env_file:
+      - .env
+    environment:
+      # Node.js memory optimization
+      - NODE_OPTIONS=--max-old-space-size=384
+    depends_on:
+      travel_mysql:
+        condition: service_healthy
+    networks:
+      - travel-network
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'wget',
+          '--quiet',
+          '--tries=1',
+          '--spider',
+          'http://localhost:${PORT}/health',
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Security hardening
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+
+volumes:
+  travel-mysql-data:
+    driver: local
+
+networks:
+  travel-network:
+    driver: bridge

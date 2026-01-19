@@ -1,6 +1,7 @@
 import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
+import { EmailService } from 'src/common/emails/emails.service';
 import { TourResponse } from 'src/types/response/book-tour.type';
 import { In, Repository } from 'typeorm';
 import { Logger } from 'winston';
@@ -18,6 +19,7 @@ export class BookToursService {
     private readonly logger: Logger,
     private readonly userService: UsersService,
     private readonly destinationService: DestinationService,
+    private readonly emailService: EmailService,
     @InjectRepository(BookTour)
     private readonly bookTourRepository: Repository<BookTour>,
     @InjectRepository(BookTourItems)
