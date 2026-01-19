@@ -23,6 +23,7 @@ export enum PaymentStatus {
   PENDING = 'pending',
   SUCCES = 'success',
   FAILED = 'failed',
+  CANCELLED = 'cancelled',
 }
 
 export enum ServiceType {

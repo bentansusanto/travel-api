@@ -1,0 +1,15 @@
+[Unit]
+Description=Travel API Docker Compose
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/www/wwwroot/travel-api
+ExecStart=/usr/local/bin/docker-compose -f docker-compose.prod.yaml up -d
+ExecStop=/usr/local/bin/docker-compose -f docker-compose.prod.yaml down
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

@@ -2,6 +2,8 @@ import { HttpException, HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { randomInt } from 'crypto';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
+import { EmailService } from 'src/common/emails/emails.service';
+import { EmailType } from 'src/types/email.type';
 import { PaymentResponse } from 'src/types/response/payment.type';
 import { Repository } from 'typeorm';
 import { Logger } from 'winston';
@@ -27,25 +29,133 @@ export class PaymentsService {
     private readonly paypalService: PaypalService,
     private readonly touristService: TouristsService,
     private readonly salesService: SalesService,
+    private readonly emailService: EmailService,
     @InjectRepository(Payment)
     private readonly paymentsRepository: Repository<Payment>,
   ) {}
-  // Exchange rate constant (can be moved to config/env later)
-  private readonly USD_TO_IDR_RATE = 15000;
+  // Cache for exchange rates (to avoid excessive API calls)
+  private exchangeRateCache: {
+    rate: number;
+    timestamp: number;
+    fromCurrency: string;
+    toCurrency: string;
+  } | null = null;
+  private readonly CACHE_DURATION = 3600000; // 1 hour in milliseconds
 
-  // Helper method to convert currency
-  private convertToUSD(amount: number, fromCurrency: string): number {
-    // Normalize currency to uppercase
-    const normalizedCurrency = fromCurrency?.toUpperCase();
+  /**
+   * Fetch exchange rate from external API
+   * Using ExchangeRate-API (free tier: 1500 requests/month)
+   * Alternative: https://api.exchangerate-api.com/v4/latest/USD
+   */
+  private async fetchExchangeRate(
+    fromCurrency: string,
+    toCurrency: string,
+  ): Promise<number> {
+    try {
+      const normalizedFrom = fromCurrency.toUpperCase();
+      const normalizedTo = toCurrency.toUpperCase();
 
-    if (normalizedCurrency === 'USD') {
+      // Check cache first
+      if (
+        this.exchangeRateCache &&
+        this.exchangeRateCache.fromCurrency === normalizedFrom &&
+        this.exchangeRateCache.toCurrency === normalizedTo &&
+        Date.now() - this.exchangeRateCache.timestamp < this.CACHE_DURATION
+      ) {
+        this.logger.debug(
+          `Using cached exchange rate: 1 ${normalizedFrom} = ${this.exchangeRateCache.rate} ${normalizedTo}`,
+        );
+        return this.exchangeRateCache.rate;
+      }
+
+      // Fetch from API
+      this.logger.debug(
+        `Fetching exchange rate from API: ${normalizedFrom} to ${normalizedTo}`,
+      );
+
+      const response = await fetch(
+        `https://api.exchangerate-api.com/v4/latest/${normalizedFrom}`,
+      );
+
+      if (!response.ok) {
+        throw new Error(`Exchange rate API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const rate = data.rates[normalizedTo];
+
+      if (!rate) {
+        throw new Error(
+          `Exchange rate not found for ${normalizedFrom} to ${normalizedTo}`,
+        );
+      }
+
+      // Cache the result
+      this.exchangeRateCache = {
+        rate,
+        timestamp: Date.now(),
+        fromCurrency: normalizedFrom,
+        toCurrency: normalizedTo,
+      };
+
+      this.logger.debug(
+        `Fetched exchange rate: 1 ${normalizedFrom} = ${rate} ${normalizedTo}`,
+      );
+
+      return rate;
+    } catch (error: any) {
+      this.logger.error(
+        `Failed to fetch exchange rate: ${error.message}. Using fallback rate.`,
+      );
+      // Fallback to approximate rate if API fails
+      if (
+        fromCurrency.toUpperCase() === 'IDR' &&
+        toCurrency.toUpperCase() === 'USD'
+      ) {
+        return 1 / 15000; // Approximate fallback
+      } else if (
+        fromCurrency.toUpperCase() === 'USD' &&
+        toCurrency.toUpperCase() === 'IDR'
+      ) {
+        return 15000; // Approximate fallback
+      }
+      return 1; // Same currency fallback
+    }
+  }
+
+  /**
+   * Convert amount from one currency to another using live exchange rates
+   */
+  private async convertCurrency(
+    amount: number,
+    fromCurrency: string,
+    toCurrency: string,
+  ): Promise<number> {
+    const normalizedFrom = fromCurrency?.toUpperCase();
+    const normalizedTo = toCurrency?.toUpperCase();
+
+    // If same currency, no conversion needed
+    if (normalizedFrom === normalizedTo) {
       return amount;
     }
-    if (normalizedCurrency === 'IDR') {
-      const converted = amount / this.USD_TO_IDR_RATE;
-    }
-    // Default: assume IDR if unknown currency
-    return amount / this.USD_TO_IDR_RATE;
+
+    // Get exchange rate
+    const rate = await this.fetchExchangeRate(normalizedFrom, normalizedTo);
+    const convertedAmount = amount * rate;
+
+    this.logger.debug(
+      `Converted ${amount} ${normalizedFrom} to ${convertedAmount.toFixed(2)} ${normalizedTo} (rate: ${rate})`,
+    );
+
+    return convertedAmount;
+  }
+
+  // Helper method to convert currency (backward compatibility)
+  private async convertToUSD(
+    amount: number,
+    fromCurrency: string,
+  ): Promise<number> {
+    return this.convertCurrency(amount, fromCurrency, 'USD');
   }
 
   private async payPalOrder(
@@ -64,7 +174,7 @@ export class PaymentsService {
     if (exchangeRate && currency.toUpperCase() === 'IDR') {
       convertedAmount = amount * exchangeRate;
     } else {
-      convertedAmount = this.convertToUSD(amount, currency);
+      convertedAmount = await this.convertToUSD(amount, currency);
     }
 
     // buat order paypal
@@ -223,6 +333,57 @@ export class PaymentsService {
           );
       }
 
+      // Send booking confirmation email to customer and admin
+      try {
+        // Calculate USD amount if PayPal
+        let totalAmountUSD: number | undefined;
+        let exchangeRate: number | undefined;
+
+        if (
+          newPayment.payment_method === PaymentMethod.PAYPAL &&
+          newPayment.currency?.toUpperCase() !== 'USD'
+        ) {
+          // Get exchange rate from payment creation
+          if (createPaymentDto.exchange_rate) {
+            exchangeRate = 1 / createPaymentDto.exchange_rate; // Reverse to get IDR to USD rate
+            totalAmountUSD = totalAmout * createPaymentDto.exchange_rate;
+          } else {
+            // Fallback to conversion method
+            totalAmountUSD = await this.convertToUSD(
+              totalAmout,
+              newPayment.currency,
+            );
+          }
+        }
+
+        const orderDetails = await this.generateOrderDetailsHTML(
+          findBookTour.data.book_tour_items,
+          newPayment.currency,
+          createPaymentDto.exchange_rate, // Use frontend exchange rate
+        );
+
+        await this.emailService.sendOrderEmail(EmailType.SUCCESS_BOOKING, {
+          email: findUser.email,
+          orderCode: newPayment.invoice_code,
+          orderDetails,
+          totalAmount: totalAmout,
+          totalAmountUSD,
+          currency: newPayment.currency,
+          exchangeRate,
+          paymentMethod: newPayment.payment_method,
+          links: paymentPaypal?.approval_url || undefined,
+        });
+
+        this.logger.debug(
+          `Booking confirmation email sent for order: ${newPayment.invoice_code}`,
+        );
+      } catch (emailError: any) {
+        // Log error but don't fail the payment creation
+        this.logger.error(
+          `Failed to send booking email: ${emailError.message}`,
+        );
+      }
+
       return {
         message: 'Success creating payment',
         data: {
@@ -287,6 +448,57 @@ export class PaymentsService {
         currency: payment.currency,
       });
 
+      // Send payment success email
+      try {
+        const bookTourDetails = await this.bookToursService.findBookTourId(
+          payment.bookTour.id,
+          payment.user.id,
+        );
+
+        // Calculate USD amount if PayPal
+        let totalAmountUSD: number | undefined;
+        let exchangeRate: number | undefined;
+
+        if (
+          payment.payment_method === PaymentMethod.PAYPAL &&
+          payment.currency?.toUpperCase() !== 'USD'
+        ) {
+          totalAmountUSD = await this.convertToUSD(
+            payment.amount,
+            payment.currency,
+          );
+          // Calculate exchange rate from amounts
+          if (totalAmountUSD && totalAmountUSD > 0) {
+            exchangeRate = payment.amount / totalAmountUSD; // IDR per USD
+          }
+        }
+
+        const orderDetails = await this.generateOrderDetailsHTML(
+          bookTourDetails.data.book_tour_items,
+          payment.currency,
+          exchangeRate ? 1 / exchangeRate : undefined, // Convert to USD rate
+        );
+
+        await this.emailService.sendOrderEmail(EmailType.SUCCESS_PAYMENT, {
+          email: payment.user.email,
+          orderCode: payment.invoice_code,
+          orderDetails,
+          totalAmount: payment.amount,
+          totalAmountUSD,
+          currency: payment.currency,
+          exchangeRate,
+          paymentMethod: payment.payment_method,
+        });
+
+        this.logger.debug(
+          `Payment success email sent for order: ${payment.invoice_code}`,
+        );
+      } catch (emailError: any) {
+        this.logger.error(
+          `Failed to send payment success email: ${emailError.message}`,
+        );
+      }
+
       return {
         message: 'Success capturing payment',
         data: {
@@ -312,6 +524,7 @@ export class PaymentsService {
       throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
+
   // handle webhook
   async handleWebhook(payload: any): Promise<PaymentResponse | any> {
     try {
@@ -405,6 +618,57 @@ export class PaymentsService {
           currency: payment.currency,
           payment_method: payment.payment_method,
         });
+
+        // Send payment success email via webhook
+        try {
+          const bookTourDetails = await this.bookToursService.findBookTourId(
+            payment.bookTour.id,
+            payment.user.id,
+          );
+
+          // Calculate USD amount if PayPal
+          let totalAmountUSD: number | undefined;
+          let exchangeRate: number | undefined;
+
+          if (
+            payment.payment_method === PaymentMethod.PAYPAL &&
+            payment.currency?.toUpperCase() !== 'USD'
+          ) {
+            totalAmountUSD = await this.convertToUSD(
+              payment.amount,
+              payment.currency,
+            );
+            // Calculate exchange rate from amounts
+            if (totalAmountUSD && totalAmountUSD > 0) {
+              exchangeRate = payment.amount / totalAmountUSD; // IDR per USD
+            }
+          }
+
+          const orderDetails = await this.generateOrderDetailsHTML(
+            bookTourDetails.data.book_tour_items,
+            payment.currency,
+            exchangeRate ? 1 / exchangeRate : undefined, // Convert to USD rate
+          );
+
+          await this.emailService.sendOrderEmail(EmailType.SUCCESS_PAYMENT, {
+            email: payment.user.email,
+            orderCode: payment.invoice_code,
+            orderDetails,
+            totalAmount: payment.amount,
+            totalAmountUSD,
+            currency: payment.currency,
+            exchangeRate,
+            paymentMethod: payment.payment_method,
+          });
+
+          this.logger.debug(
+            `Payment success email sent via webhook for order: ${payment.invoice_code}`,
+          );
+        } catch (emailError: any) {
+          this.logger.error(
+            `Failed to send payment success email via webhook: ${emailError.message}`,
+          );
+        }
 
         this.logger.debug(
           `Successfully processed webhook for payment ${payment.id}`,
@@ -683,11 +947,184 @@ export class PaymentsService {
     }
   }
 
-  update(id: string) {
-    return `This action updates a #${id} payment`;
+  /**
+   * Cancel a payment
+   * - Only pending/draft payments can be cancelled
+   * - Only the user who created the payment can cancel it
+   * - Updates payment status to CANCELLED
+   * - Resets book tour status to DRAFT
+   * - Optionally cancels PayPal transaction if applicable
+   */
+  async cancelPayment(userId: string, id: string): Promise<PaymentResponse> {
+    try {
+      // Find payment with relations
+      const payment = await this.paymentsRepository.findOne({
+        where: { id },
+        relations: ['user', 'bookTour'],
+      });
+
+      if (!payment) {
+        this.logger.error(`Payment not found: ${id}`);
+        throw new HttpException('Payment not found', HttpStatus.NOT_FOUND);
+      }
+
+      // Authorization: Only the user who created the payment can cancel it
+      if (payment.user.id !== userId) {
+        this.logger.error(
+          `Unauthorized cancel attempt: User ${userId} tried to cancel payment ${id} owned by ${payment.user.id}`,
+        );
+        throw new HttpException(
+          'You are not authorized to cancel this payment',
+          HttpStatus.FORBIDDEN,
+        );
+      }
+
+      // Check if payment can be cancelled
+      if (payment.status === PaymentStatus.SUCCES) {
+        this.logger.error(
+          `Cannot cancel completed payment: ${id}. Status: ${payment.status}`,
+        );
+        throw new HttpException(
+          'Cannot cancel a completed payment. Please request a refund instead.',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      if (payment.status === PaymentStatus.CANCELLED) {
+        this.logger.warn(`Payment already cancelled: ${id}`);
+        throw new HttpException(
+          'Payment is already cancelled',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      // If PayPal payment is in progress, attempt to void/cancel the order
+      if (
+        payment.payment_method === PaymentMethod.PAYPAL &&
+        payment.transactionId &&
+        payment.status === PaymentStatus.PENDING
+      ) {
+        try {
+          // Note: PayPal orders are automatically voided after 3 hours if not captured
+          // We just log this for tracking purposes
+          this.logger.debug(
+            `PayPal order ${payment.transactionId} will be auto-voided if not captured`,
+          );
+          // Optionally, you can implement explicit void via PayPal API here
+          // await this.paypalService.voidOrder(payment.transactionId);
+        } catch (paypalError: any) {
+          this.logger.warn(
+            `Failed to void PayPal order: ${paypalError.message}`,
+          );
+          // Continue with cancellation even if PayPal void fails
+        }
+      }
+
+      // Update payment status to CANCELLED
+      await this.paymentsRepository.update(id, {
+        status: PaymentStatus.CANCELLED,
+        redirect_url: null, // Clear redirect URL
+      });
+
+      // Reset book tour status to DRAFT so user can try again
+      if (payment.bookTour) {
+        await this.bookToursService.updateStatusBookTour(
+          payment.bookTour.id,
+          StatusBookTour.DRAFT,
+        );
+        this.logger.debug(
+          `Book tour ${payment.bookTour.id} status reset to DRAFT`,
+        );
+      }
+
+      this.logger.debug(
+        `Payment cancelled successfully: ${id} by user ${userId}`,
+      );
+
+      return {
+        message: 'Payment cancelled successfully',
+        data: {
+          id: payment.id,
+          user_id: payment.user?.id || '',
+          invoice_code: payment.invoice_code,
+          book_tour_id: payment.bookTour?.id || '',
+          amount: payment.amount,
+          currency: payment.currency,
+          service_type: payment.service_type,
+          status: PaymentStatus.CANCELLED,
+          payment_method: payment.payment_method,
+          transaction_id: payment.transactionId,
+          created_at: payment.created_at,
+          updated_at: new Date(),
+        },
+      };
+    } catch (error) {
+      this.logger.error(`Error cancel payment: ${error.message}`);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(error.message, HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   remove(id: string) {
     return `This action removes a #${id} payment`;
+  }
+
+  /**
+   * Generate HTML for order details email
+   * @param bookTourItems - Array of booking items
+   * @param currency - Currency code (USD, IDR, etc)
+   * @param exchangeRate - Exchange rate for conversion (optional)
+   */
+  private async generateOrderDetailsHTML(
+    bookTourItems: any[],
+    currency?: string,
+    exchangeRate?: number,
+  ): Promise<string> {
+    if (!bookTourItems || bookTourItems.length === 0) {
+      return '<p>No tour items</p>';
+    }
+
+    const normalizedCurrency = currency?.toUpperCase() || 'IDR';
+    const isUSD = normalizedCurrency === 'USD';
+
+    const itemsHTML = await Promise.all(
+      bookTourItems.map(async (item, index) => {
+        const translation =
+          item.destination?.translations?.find(
+            (t: any) => t.language_code === 'id',
+          ) || item.destination?.translations?.[0];
+
+        const destinationName = translation?.name || 'Unknown Destination';
+        const priceIDR = item.destination?.price || 0;
+        const location = item.destination?.location || 'Unknown Location';
+        const visitDate = item.visit_date || 'Not specified';
+
+        // Format price based on currency
+        let priceDisplay = '';
+        if (isUSD) {
+          // Convert to USD
+          const priceUSD = exchangeRate
+            ? priceIDR * exchangeRate
+            : await this.convertToUSD(priceIDR, 'IDR');
+          priceDisplay = `💰 $ ${priceUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        } else {
+          // Display in IDR
+          priceDisplay = `💰 Rp ${priceIDR.toLocaleString('id-ID')}`;
+        }
+
+        return `
+          <div style="margin-bottom: 15px; padding: 10px; border-left: 3px solid #f67f00;">
+            <p style="margin: 5px 0;"><strong>${index + 1}. ${destinationName}</strong></p>
+            <p style="margin: 5px 0; color: #666;">📍 ${location}</p>
+            <p style="margin: 5px 0; color: #666;">📅 Visit Date: ${visitDate}</p>
+            <p style="margin: 5px 0; color: #f67f00; font-weight: bold;">${priceDisplay}</p>
+          </div>
+        `;
+      }),
+    );
+
+    return itemsHTML.join('');
   }
 }

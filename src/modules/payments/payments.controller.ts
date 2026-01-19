@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Put,
 } from '@nestjs/common';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { CurrentUser } from 'src/common/decorators/user.decorator';
@@ -83,6 +84,18 @@ export class PaymentsController {
   @HttpCode(HttpStatus.OK)
   async findOne(@Param('id') id: string): Promise<WebResponse> {
     const result = await this.paymentsService.findOnePayment(id);
+    return {
+      message: result.message,
+      data: result.data,
+    };
+  }
+
+  // cancel payment
+  @Roles('traveller')
+  @Put('cancel/:orderId')
+  @HttpCode(HttpStatus.OK)
+  async cancel(@CurrentUser() user: any, @Param('orderId') orderId: string): Promise<PaymentResponse> {
+    const result = await this.paymentsService.cancelPayment(user.id, orderId);
     return {
       message: result.message,
       data: result.data,
