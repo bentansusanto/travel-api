@@ -1,4 +1,4 @@
-import crypto from 'crypto';
+import Hashids from 'hashids';
 import {
   BeforeInsert,
   Column,
@@ -19,7 +19,7 @@ export class Roles {
   @BeforeInsert()
   generateId() {
     if (!this.id) {
-      this.id = crypto.randomUUID();
+      this.id = new Hashids(process.env.ID_SECRET, 10).encode(Date.now());
     }
   }
 

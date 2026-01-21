@@ -16,6 +16,8 @@ async function bootstrap() {
   const origins = [
     'http://localhost:3200',
     'http://localhost:3700',
+    'http://localhost:3006',
+    'http://localhost:3005',
     'https://pacifictravelindo.com',
     'https://www.pacifictravelindo.com',
     'https://pasifik.my.id',
