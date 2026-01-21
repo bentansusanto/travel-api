@@ -41,7 +41,6 @@ import { RolesGuard } from './middlewares/role.guard';
         password: configService.get<string>('DATABASE_PASSWORD'),
         database: configService.get<string>('DATABASE_NAME'),
         autoLoadEntities: true,
-        // synchronize: configService.get<string>('NODE_ENV') === 'production',
         synchronize: configService.get<string>('NODE_ENV') === 'development',
         charset: 'utf8mb4',
         ssl: false,
