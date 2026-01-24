@@ -104,10 +104,6 @@ export class AuthService {
 
       const user = await this.usersService.create(userDto);
 
-      // Generate tokens
-      const tokens = crypto.randomBytes(40).toString('hex');
-      const tokenVerify = `${tokens}-${Date.now()}`;
-
       // Send verification email
       const links =
         role.code === 'traveller'
@@ -115,7 +111,7 @@ export class AuthService {
           : process.env.ADMIN_SITE;
       const baseSite = (links || '').replace(/\/+$/, '');
       await this.emailService.sendMail(EmailType.VERIFY_ACCOUNT, {
-        links: `${baseSite}/verify-account?verify_token=${tokenVerify}`,
+        links: `${baseSite}/verify-account?verify_token=${user.verify_code}`,
         email: user.email,
         subjectMessage: 'Verify your account',
       });
@@ -276,17 +272,6 @@ export class AuthService {
           );
           throw new HttpException(
             'Access denied. Traveller accounts cannot login to admin panel.',
-            HttpStatus.FORBIDDEN,
-          );
-        }
-      } else {
-        // Traveller site (default): Only allow traveller role
-        if (user.role?.code !== 'traveller') {
-          this.logger.error(
-            `Login denied: User role is ${user.role?.code}, expected traveller`,
-          );
-          throw new HttpException(
-            'Access denied user expected traveller',
             HttpStatus.FORBIDDEN,
           );
         }
