@@ -27,7 +27,7 @@ export class DestinationController {
   constructor(private readonly destinationService: DestinationService) {}
 
   // create destination
-  @Roles('admin', 'owner')
+  @Roles('admin', 'owner', 'developer')
   @Post('/create')
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() reqDto: CreateDestinationDto): Promise<WebResponse> {
@@ -39,7 +39,7 @@ export class DestinationController {
   }
 
   // create translation destination
-  @Roles('admin', 'owner')
+  @Roles('admin', 'owner', 'developer')
   @Post('/:id/translation')
   @HttpCode(HttpStatus.CREATED)
   async createTranslation(
@@ -115,7 +115,7 @@ export class DestinationController {
   }
 
   // update destination
-  @Roles('admin', 'owner')
+  @Roles('admin', 'owner', 'developer')
   @Put('/:id/update')
   @HttpCode(HttpStatus.OK)
   async update(
@@ -130,7 +130,7 @@ export class DestinationController {
   }
 
   // update translation destination
-  @Roles('admin', 'owner')
+  @Roles('admin', 'owner', 'developer')
   @Put('/:id/update-translation')
   @HttpCode(HttpStatus.OK)
   async updateTranslation(
@@ -148,7 +148,7 @@ export class DestinationController {
   }
 
   // delete destination with translation
-  @Roles('admin', 'owner')
+  @Roles('admin', 'owner', 'developer')
   @Delete('/:id/delete')
   @HttpCode(HttpStatus.OK)
   async delete(@Param('id') id: string): Promise<WebResponse> {

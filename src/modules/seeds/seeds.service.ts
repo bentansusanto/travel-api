@@ -1,11 +1,14 @@
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import * as bcrypt from 'bcryptjs';
 import { Country as CscCountry, State as CscState } from 'country-state-city';
+import Hashids from 'hashids';
 import { Repository } from 'typeorm';
 import { Country } from '../country/entities/country.entity';
 import { State } from '../country/entities/state.entity';
 import { CategoryDestination } from '../destination/entities/category_destination.entity';
 import { Roles } from '../users/entities/role.entity';
+import { User } from '../users/entities/user.entity';
 
 @Injectable()
 export class SeedsService implements OnModuleInit {
@@ -18,10 +21,13 @@ export class SeedsService implements OnModuleInit {
     private readonly countryRepository: Repository<Country>,
     @InjectRepository(State)
     private readonly stateRepository: Repository<State>,
+    @InjectRepository(User)
+    private readonly userRepository: Repository<User>,
   ) {}
 
   async onModuleInit() {
     await this.seedRoles();
+    await this.seedDeveloperUser();
     await this.seedCountryAndState();
     await this.seedCategoryDestination();
   }
@@ -46,6 +52,42 @@ export class SeedsService implements OnModuleInit {
         await this.roleRepository.save(newRole);
         console.log(`Role ${roleData.name} created successfully.`);
       }
+    }
+  }
+
+  // seed developer user
+  async seedDeveloperUser() {
+    const developerEmail = 'travelindo@gmail.com';
+    const developerRole = await this.roleRepository.findOneBy({
+      code: 'developer',
+    });
+
+    if (!developerRole) {
+      console.log('Role Developer not found, skipping developer user seed.');
+      return;
+    }
+
+    const existingUser = await this.userRepository.findOneBy({
+      email: developerEmail,
+    });
+
+    if (!existingUser) {
+      const hashIds = new Hashids(process.env.ID_SECRET, 10);
+      const hashPassword = await bcrypt.hash('Omah1suro!', 10);
+
+      const newUser = this.userRepository.create({
+        id: hashIds.encode(Date.now()),
+        name: 'Developer',
+        email: developerEmail,
+        password: hashPassword,
+        role: developerRole,
+        is_verified: true,
+      });
+
+      await this.userRepository.save(newUser);
+      console.log(`User Developer created successfully.`);
+    } else {
+      console.log(`User Developer already exists.`);
     }
   }
 
