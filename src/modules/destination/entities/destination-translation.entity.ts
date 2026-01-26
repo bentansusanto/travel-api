@@ -30,7 +30,9 @@ export class DestinationTranslation {
   @Column()
   slug: string;
 
-  @Column()
+  @Column({
+    type: 'text',
+  })
   description: string;
 
   @Column({

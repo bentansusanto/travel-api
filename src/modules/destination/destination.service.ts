@@ -343,6 +343,7 @@ export class DestinationService {
         where: {
           id: destinationId,
         },
+        relations: ['state', 'state.country', 'category_destination'],
       });
 
       if (!destination) {
@@ -364,6 +365,7 @@ export class DestinationService {
           where: {
             id: reqDto.state_id,
           },
+          relations: ['country'],
         }),
       ]);
 
@@ -375,7 +377,16 @@ export class DestinationService {
         );
       }
 
-      await this.destinationRepository.update(destinationId, reqDto);
+      // Update with relation objects, not raw IDs
+      await this.destinationRepository.update(destinationId, {
+        category_destination: {
+          id: reqDto.category_destination_id,
+        },
+        state: {
+          id: reqDto.state_id,
+        },
+        price: reqDto.price,
+      });
 
       this.logger.debug(`Update destination successfully`);
 
@@ -383,10 +394,10 @@ export class DestinationService {
         message: 'Update destination successfully',
         data: {
           id: destination.id,
-          state_id: destination.state.id,
-          location: `${destination.state.name}, ${destination.state.country.name}`,
-          category_destination_id: destination.category_destination.id,
-          price: destination.price,
+          state_id: findState.id,
+          location: `${findState.name}, ${findState.country.name}`,
+          category_destination_id: findCategoryDestination.id,
+          price: reqDto.price,
         },
       };
     } catch (error) {
@@ -435,13 +446,29 @@ export class DestinationService {
         );
       }
 
+      // Find the translation by destination ID and language code
+      const findTranslation =
+        await this.destinationTranslationRepository.findOne({
+          where: {
+            destination: {
+              id: destinationId,
+            },
+            language_code: reqDto.language_code,
+          },
+        });
+
+      if (!findTranslation) {
+        this.logger.error('Destination translation not found');
+        throw new HttpException(
+          'Destination translation not found',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
       const genSlug = this.generateSlug(reqDto.name);
 
-      await this.destinationTranslationRepository.update(destinationId, {
-        destination: {
-          id: destinationId,
-        },
-        language_code: reqDto.language_code,
+      // Update using the translation ID (number), not destination ID (string)
+      await this.destinationTranslationRepository.update(findTranslation.id, {
         name: reqDto.name,
         slug: genSlug,
         description: reqDto.description,
