@@ -377,14 +377,15 @@ export class DestinationService {
         );
       }
 
+      // Update with relation objects, not raw IDs
       await this.destinationRepository.update(destinationId, {
-        price: reqDto.price,
-        state: {
-          id: reqDto.state_id,
-        },
         category_destination: {
           id: reqDto.category_destination_id,
         },
+        state: {
+          id: reqDto.state_id,
+        },
+        price: reqDto.price,
       });
 
       this.logger.debug(`Update destination successfully`);
@@ -445,52 +446,39 @@ export class DestinationService {
         );
       }
 
-      const genSlug = this.generateSlug(reqDto.name);
-
-      // Check if translation exists for this language
-      const existingTranslation =
+      // Find the translation by destination ID and language code
+      const findTranslation =
         await this.destinationTranslationRepository.findOne({
           where: {
-            destination: { id: destinationId },
+            destination: {
+              id: destinationId,
+            },
             language_code: reqDto.language_code,
           },
         });
 
-      if (existingTranslation) {
-        // Update existing translation
-        await this.destinationTranslationRepository.update(
-          existingTranslation.id,
-          {
-            name: reqDto.name,
-            slug: genSlug,
-            description: reqDto.description,
-            thumbnail: reqDto.thumbnail,
-            image: Array.isArray(reqDto.image) ? reqDto.image : [],
-            detail_tour: Array.isArray(reqDto.detail_tour)
-              ? reqDto.detail_tour
-              : [],
-            facilities: Array.isArray(reqDto.facilities)
-              ? reqDto.facilities
-              : [],
-          },
+      if (!findTranslation) {
+        this.logger.error('Destination translation not found');
+        throw new HttpException(
+          'Destination translation not found',
+          HttpStatus.BAD_REQUEST,
         );
-      } else {
-        // Create new translation
-        const newTranslation = this.destinationTranslationRepository.create({
-          destination: { id: destinationId },
-          language_code: reqDto.language_code,
-          name: reqDto.name,
-          slug: genSlug,
-          description: reqDto.description,
-          thumbnail: reqDto.thumbnail,
-          image: Array.isArray(reqDto.image) ? reqDto.image : [],
-          detail_tour: Array.isArray(reqDto.detail_tour)
-            ? reqDto.detail_tour
-            : [],
-          facilities: Array.isArray(reqDto.facilities) ? reqDto.facilities : [],
-        });
-        await this.destinationTranslationRepository.save(newTranslation);
       }
+
+      const genSlug = this.generateSlug(reqDto.name);
+
+      // Update using the translation ID (number), not destination ID (string)
+      await this.destinationTranslationRepository.update(findTranslation.id, {
+        name: reqDto.name,
+        slug: genSlug,
+        description: reqDto.description,
+        thumbnail: reqDto.thumbnail,
+        image: Array.isArray(reqDto.image) ? reqDto.image : [],
+        detail_tour: Array.isArray(reqDto.detail_tour)
+          ? reqDto.detail_tour
+          : [],
+        facilities: Array.isArray(reqDto.facilities) ? reqDto.facilities : [],
+      });
 
       this.logger.debug(`Update destination translation successfully`);
 
