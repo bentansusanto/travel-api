@@ -12,6 +12,7 @@ import {
 export enum Gender {
   MR = 'Mr',
   MISS = 'Miss',
+  MS = 'Ms',
   MRS = 'Mrs',
 }
 

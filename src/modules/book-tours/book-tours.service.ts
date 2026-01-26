@@ -384,6 +384,11 @@ export class BookToursService {
           'book_tour_items.destination.state',
           'book_tour_items.destination.state.country',
         ],
+        order: {
+          book_tour_items: {
+            visit_date: 'ASC',
+          },
+        },
       });
       return {
         message: 'Success get book tour',
