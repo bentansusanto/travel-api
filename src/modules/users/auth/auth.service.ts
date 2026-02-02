@@ -305,7 +305,7 @@ export class AuthService {
           name: user.name,
           email: user.email,
           is_verified: user.is_verified,
-          role_id: user.role.id,
+          role_id: user.role_id,
           session: token,
         },
       };
@@ -347,7 +347,7 @@ export class AuthService {
   async getUser(id: string): Promise<AuthResponse> {
     try {
       const user = await this.usersService.findById(id);
-      if (!user || user.is_verified === false) {
+      if (!user || user.data.is_verified === false) {
         this.logger.error('Account not verified or not register');
         throw new HttpException(
           {
@@ -365,15 +365,15 @@ export class AuthService {
       return {
         message: 'Successfully get user',
         data: {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role_id: user.role?.id,
-          is_verified: user.is_verified,
+          id: user.data.id,
+          name: user.data.name,
+          email: user.data.email,
+          role_id: user.data.role?.id,
+          is_verified: user.data.is_verified,
           role: {
-            id: user.role?.id,
-            name: user.role?.name,
-            code: user.role?.code,
+            id: user.data.role?.id,
+            name: user.data.role?.name,
+            code: user.data.role?.code,
           },
         },
       };

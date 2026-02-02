@@ -91,7 +91,7 @@ export class BookToursService {
       // 2. Check if there's an existing DRAFT or PENDING book tour for the SAME country AND state
       let bookTour = await this.bookTourRepository.findOne({
         where: {
-          user: { id: findUser.id },
+          user: { id: findUser.data.id },
           country: { id: countryId },
           state: { id: stateId }, // Filter by state as well
           status: In([StatusBookTour.DRAFT, StatusBookTour.PENDING]),
@@ -166,7 +166,7 @@ export class BookToursService {
         // 3. If no existing tour for this country and state, create a new one
         bookTour = this.bookTourRepository.create({
           user: {
-            id: findUser.id,
+            id: findUser.data.id,
           },
           country: {
             id: countryId,

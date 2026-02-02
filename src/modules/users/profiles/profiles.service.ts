@@ -28,7 +28,7 @@ export class ProfilesService {
       const profile = this.profileRepository.create({
         ...reqDto,
         user: {
-          id: user.id,
+          id: user.data.id,
         },
       });
       await this.profileRepository.save(profile);
@@ -85,7 +85,7 @@ export class ProfilesService {
         state: reqDto.state,
         country: reqDto.country,
         user: {
-          id: findUser.id,
+          id: findUser.data.id,
         },
       });
 
