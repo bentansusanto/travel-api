@@ -363,7 +363,7 @@ export class PaymentsService {
         );
 
         await this.emailService.sendOrderEmail(EmailType.SUCCESS_BOOKING, {
-          email: findUser.email,
+          email: findUser.data.email,
           orderCode: newPayment.invoice_code,
           orderDetails,
           totalAmount: totalAmout,
