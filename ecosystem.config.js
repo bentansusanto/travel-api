@@ -11,7 +11,7 @@ module.exports = {
       // Environment variables
       env: {
         NODE_ENV: 'production',
-        PORT: 8082,
+        PORT: 8080,
       },
 
       // Memory management (CRITICAL for shared VPS!)
