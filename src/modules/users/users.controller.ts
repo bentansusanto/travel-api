@@ -15,7 +15,7 @@ export class UsersController {
   @Post('create')
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() createUserDto: RegisterDto): Promise<WebResponse> {
-    const result = await this.usersService.create(createUserDto);
+    const result = await this.usersService.createUser(createUserDto);
     return{
       message: result.message,
       data: result.data

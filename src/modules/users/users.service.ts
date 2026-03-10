@@ -74,23 +74,18 @@ export class UsersService {
       }
 
       const hashPassword = await bcrypt.hash(reqDto.password, 10);
-      const tokens = crypto.randomBytes(40).toString('hex');
-      const tokenVerify = `${tokens}-${Date.now()}`;
+
 
       const userData: any = {
         id: this.hashIds.encode(Date.now()),
         name: reqDto.name,
         email: reqDto.email,
         password: hashPassword,
-        verify_code: tokenVerify,
         is_verified: true,
-        verify_code_expires_at: new Date(Date.now() + 60 * 60 * 1000),
+        role: {
+          id: reqDto.role_id,
+        },
       };
-
-      // Only set role if role_id is provided
-      if (reqDto.role_id) {
-        userData.role = { id: reqDto.role_id };
-      }
 
       const newUser = this.userRepository.create(userData);
 
