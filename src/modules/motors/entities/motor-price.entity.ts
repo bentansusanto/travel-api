@@ -12,8 +12,13 @@ import {
 } from 'typeorm';
 import { Motor } from './motor.entity';
 
-@Entity('variants')
-export class Variant {
+export enum PriceType {
+  DAILY = 'daily',
+  WEEKLY = 'weekly',
+}
+
+@Entity('motor_prices')
+export class MotorPrice {
   @PrimaryColumn()
   id: string;
 
@@ -27,12 +32,22 @@ export class Variant {
     }
   }
 
-  @ManyToOne(() => Motor, (motor) => motor.variants)
+  @ManyToOne(() => Motor, (motor) => motor.motor_prices)
   @JoinColumn({ name: 'motor_id' })
   motor: Motor;
 
-  @Column()
-  color: string;
+  @Column({
+    type: 'enum',
+    enum: PriceType,
+  })
+  price_type: PriceType;
+
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+  })
+  price: number;
 
   @CreateDateColumn()
   created_at: Date;

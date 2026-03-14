@@ -1,4 +1,5 @@
 import Hashids from 'hashids';
+import { BookMotor } from 'src/modules/book-motors/entities/book-motor.entity';
 import { BookTour } from 'src/modules/book-tours/entities/book-tour.entity';
 import {
   BeforeInsert,
@@ -33,6 +34,10 @@ export class Tourist {
   @ManyToOne(() => BookTour, (bookTour) => bookTour.tourists)
   @JoinColumn({ name: 'book_tour_id' })
   bookTour: BookTour;
+
+  @ManyToOne(() => BookMotor, (bookMotor) => bookMotor.tourists)
+  @JoinColumn({ name: 'book_motor_id' })
+  book_motor: BookMotor;
 
   @Column()
   name: string;

@@ -29,10 +29,12 @@ export class SalesService {
 
       // Create sale record
       const sale = this.saleRepository.create({
-        bookTour: { id: paymentData.book_tour_id },
+        bookTour: paymentData.book_tour_id ? { id: paymentData.book_tour_id } : null,
+        bookMotor: paymentData.book_motor_id ? { id: paymentData.book_motor_id } : null,
         payment: { id: paymentData.payment_id },
         amount: paymentData.amount,
         currency: paymentData.currency,
+        service_type: paymentData.service_type,
         status: SaleStatus.COMPLETED,
       });
 

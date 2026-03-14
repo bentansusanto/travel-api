@@ -12,6 +12,7 @@ import {
 } from 'typeorm';
 import { Country } from './country.entity';
 import { BookTour } from 'src/modules/book-tours/entities/book-tour.entity';
+import { Motor } from 'src/modules/motors/entities/motor.entity';
 
 @Entity('states')
 export class State {
@@ -37,6 +38,9 @@ export class State {
 
   @OneToMany(() => BookTour, (bookTour) => bookTour.state)
   bookTours: BookTour[];
+
+  @OneToMany(() => Motor, (motor) => motor.state)
+  motors: Motor[];
 
   @Column()
   latitude: string;

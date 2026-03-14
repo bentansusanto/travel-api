@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BookToursModule } from '../book-tours/book-tours.module';
+import { BookMotorsModule } from '../book-motors/book-motors.module';
 import { SalesModule } from '../sales/sales.module';
 import { TouristsModule } from '../tourists/tourists.module';
 import { UsersModule } from '../users/users.module';
@@ -15,6 +16,7 @@ import { PaypalService } from './paypal.service';
   imports: [
     TypeOrmModule.forFeature([Payment]),
     BookToursModule,
+    BookMotorsModule,
     UsersModule,
     TouristsModule,
     SalesModule,

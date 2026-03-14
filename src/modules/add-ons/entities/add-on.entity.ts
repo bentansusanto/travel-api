@@ -5,15 +5,18 @@ import {
   CreateDateColumn,
   DeleteDateColumn,
   Entity,
-  JoinColumn,
-  ManyToOne,
   PrimaryColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { Motor } from './motor.entity';
 
-@Entity('variants')
-export class Variant {
+export enum AddOnCategory {
+  MOTOR = 'motor',
+  TOUR = 'tour',
+  GENERAL = 'general',
+}
+
+@Entity('add_ons')
+export class AddOn {
   @PrimaryColumn()
   id: string;
 
@@ -27,12 +30,26 @@ export class Variant {
     }
   }
 
-  @ManyToOne(() => Motor, (motor) => motor.variants)
-  @JoinColumn({ name: 'motor_id' })
-  motor: Motor;
-
   @Column()
-  color: string;
+  name: string;
+
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    default: 0,
+  })
+  price: number;
+
+  @Column({
+    type: 'enum',
+    enum: AddOnCategory,
+    default: AddOnCategory.GENERAL,
+  })
+  category: AddOnCategory;
+
+  @Column({ type: 'text', nullable: true })
+  description: string;
 
   @CreateDateColumn()
   created_at: Date;

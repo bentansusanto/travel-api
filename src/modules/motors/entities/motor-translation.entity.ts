@@ -1,19 +1,9 @@
 import Hashids from 'hashids';
-import {
-  BeforeInsert,
-  Column,
-  CreateDateColumn,
-  DeleteDateColumn,
-  Entity,
-  JoinColumn,
-  ManyToOne,
-  PrimaryColumn,
-  UpdateDateColumn,
-} from 'typeorm';
+import { BeforeInsert, Column, CreateDateColumn, DeleteDateColumn, Entity, JoinColumn, ManyToOne, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 import { Motor } from './motor.entity';
 
-@Entity('variants')
-export class Variant {
+@Entity('motor_translations')
+export class MotorTranslation {
   @PrimaryColumn()
   id: string;
 
@@ -27,21 +17,30 @@ export class Variant {
     }
   }
 
-  @ManyToOne(() => Motor, (motor) => motor.variants)
+  @ManyToOne(() => Motor, (motor) => motor.translations)
   @JoinColumn({ name: 'motor_id' })
   motor: Motor;
 
   @Column()
-  color: string;
+  language_code: string;
+
+  @Column()
+  name_motor: string;
+
+  @Column()
+  slug: string;
+
+  @Column()
+  description: string;
 
   @CreateDateColumn()
-  created_at: Date;
+  created_at:Date;
 
   @UpdateDateColumn()
-  updated_at: Date;
+  updated_at:Date;
 
   @DeleteDateColumn({
     nullable: true,
   })
-  deleted_at: Date;
+  deleted_at:Date;
 }

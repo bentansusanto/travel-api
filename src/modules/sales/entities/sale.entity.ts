@@ -1,6 +1,8 @@
 import Hashids from 'hashids';
 import { BookTour } from 'src/modules/book-tours/entities/book-tour.entity';
-import { Payment } from 'src/modules/payments/entities/payment.entity';
+import { Payment } from '../../payments/entities/payment.entity';
+import { ServiceType } from '../../payments/entities/service-type.enum';
+import { BookMotor } from '../../book-motors/entities/book-motor.entity';
 import {
   BeforeInsert,
   Column,
@@ -41,6 +43,10 @@ export class Sale {
   @JoinColumn({ name: 'book_tour_id' })
   bookTour: BookTour;
 
+  @ManyToOne(() => BookMotor, (bookMotor) => bookMotor.sales)
+  @JoinColumn({ name: 'book_motor_id' })
+  bookMotor: BookMotor;
+
   @OneToOne(() => Payment, { nullable: true })
   @JoinColumn({ name: 'payment_id' })
   payment: Payment;
@@ -61,6 +67,14 @@ export class Sale {
     name: 'currency',
   })
   currency: Currency;
+
+  @Column({
+    type: 'enum',
+    enum: ServiceType,
+    default: ServiceType.TOUR,
+    name: 'service_type',
+  })
+  service_type: ServiceType;
 
   @Column({
     type: 'enum',

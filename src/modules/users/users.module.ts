@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { LoggerModule } from 'src/config/logger/logger.module';
 import { AuthModule } from './auth/auth.module';
 import { Roles } from './entities/role.entity';
 import { Session } from './entities/session.entity';
@@ -16,7 +15,7 @@ import { RolesModule } from './roles/roles.module';
   providers: [UsersService],
   imports: [
     AuthModule,
-    LoggerModule,
+
     SessionsModule,
     TypeOrmModule.forFeature([User, Session, Roles]),
     ProfilesModule,

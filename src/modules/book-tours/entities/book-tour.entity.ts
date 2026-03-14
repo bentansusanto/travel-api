@@ -14,6 +14,7 @@ import { BookTourItems } from './book-tour-items.entity';
 import { Tourist } from 'src/modules/tourists/entities/tourist.entity';
 import { Payment } from 'src/modules/payments/entities/payment.entity';
 import { State } from 'src/modules/country/entities/state.entity';
+import { BookingAddOn } from 'src/modules/add-ons/entities/booking-add-on.entity';
 
 export enum StatusBookTour {
   DRAFT = 'draft',
@@ -71,6 +72,9 @@ export class BookTour {
 
   @OneToMany(() => Payment, (payment) => payment.bookTour)
   payments: Payment[];
+
+  @OneToMany(() => BookingAddOn, (bookingAddOn) => bookingAddOn.book_tour)
+  add_ons: BookingAddOn[];
 
   @Column()
   created_at: Date;

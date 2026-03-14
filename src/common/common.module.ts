@@ -21,10 +21,21 @@ import { EmailService } from './emails/emails.service';
 import { ErrorsService } from './errors/errors.service';
 import { AuthGuard } from './middlewares/auth.guard';
 import { RolesGuard } from './middlewares/role.guard';
+import { Motor } from 'src/modules/motors/entities/motor.entity';
+import { Merek } from 'src/modules/motors/entities/merek.entity';
+import { Variant } from 'src/modules/motors/entities/variant.entity';
+import { MotorTranslation } from 'src/modules/motors/entities/motor-translation.entity';
+import { MotorPrice } from 'src/modules/motors/entities/motor-price.entity';
+import { AddOn } from 'src/modules/add-ons/entities/add-on.entity';
+import { BookMotor } from 'src/modules/book-motors/entities/book-motor.entity';
+import { BookingAddOn } from 'src/modules/add-ons/entities/booking-add-on.entity';
+import { LoggerModule } from './logger/logger.module';
+import { BookMotorItem } from 'src/modules/book-motors/entities/book-motor-item.entity';
 
 @Global()
 @Module({
   imports: [
+    LoggerModule,
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath:
@@ -67,6 +78,15 @@ import { RolesGuard } from './middlewares/role.guard';
       Payment,
       Sale,
       Profile,
+      Motor,
+      Merek,
+      Variant,
+      MotorTranslation,
+      MotorPrice,
+      AddOn,
+      BookMotor,
+      BookingAddOn,
+      BookMotorItem,
     ]),
     ThrottlerModule.forRoot([
       {

@@ -1,6 +1,8 @@
 import Hashids from 'hashids';
 import { BookTour } from 'src/modules/book-tours/entities/book-tour.entity';
+import { BookMotor } from 'src/modules/book-motors/entities/book-motor.entity';
 import { User } from 'src/modules/users/entities/user.entity';
+import { ServiceType } from './service-type.enum';
 import {
   BeforeInsert,
   Column,
@@ -26,13 +28,7 @@ export enum PaymentStatus {
   CANCELLED = 'cancelled',
 }
 
-export enum ServiceType {
-  TOUR = 'tour',
-  RENT_MOTOR = 'rent_motor',
-  ENTERTAINMENT = 'entertainment',
-  HOTEL = 'hotel',
-  FLIGHT = 'flight',
-}
+
 
 @Entity('payments')
 export class Payment {
@@ -56,6 +52,10 @@ export class Payment {
   @ManyToOne(() => BookTour, (bookTour) => bookTour.payments)
   @JoinColumn({ name: 'book_tour_id' })
   bookTour: BookTour;
+
+  @ManyToOne(() => BookMotor)
+  @JoinColumn({ name: 'book_motor_id' })
+  bookMotor: BookMotor;
 
   @Column()
   invoice_code: string;
