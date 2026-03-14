@@ -1,34 +1,50 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+} from '@nestjs/common';
+import { Roles } from 'src/common/decorators/roles.decorator';
+import { CurrentUser } from 'src/common/decorators/user.decorator';
+import { BookMotorResponse } from 'src/types/response/book-motor.type';
+import { WebResponse } from 'src/types/response/response.type';
+import { User } from '../users/entities/user.entity';
 import { BookMotorsService } from './book-motors.service';
 import { CreateBookMotorDto } from './dto/create-book-motor.dto';
-import { UpdateBookMotorDto } from './dto/update-book-motor.dto';
 
 @Controller('book-motors')
 export class BookMotorsController {
   constructor(private readonly bookMotorsService: BookMotorsService) {}
 
-  @Post()
-  create(@Body() createBookMotorDto: CreateBookMotorDto) {
-    return this.bookMotorsService.create(createBookMotorDto);
+  @Roles('tourist')
+  @Post('create')
+  @HttpCode(HttpStatus.CREATED)
+  async create(
+    @Body() createBookMotorDto: CreateBookMotorDto,
+    @CurrentUser() user: User,
+  ): Promise<WebResponse> {
+    const result = await this.bookMotorsService.create(
+      createBookMotorDto,
+      user,
+    );
+    return {
+      message: result.message,
+      data: result.data,
+    };
   }
 
-  @Get()
-  findAll() {
-    return this.bookMotorsService.findAll();
+  @Get('find-all')
+  @HttpCode(HttpStatus.OK)
+  async findAll(): Promise<BookMotorResponse> {
+    return await this.bookMotorsService.findAll();
   }
 
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.bookMotorsService.findOne(+id);
-  }
-
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateBookMotorDto: UpdateBookMotorDto) {
-    return this.bookMotorsService.update(+id, updateBookMotorDto);
-  }
-
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.bookMotorsService.remove(+id);
+  @HttpCode(HttpStatus.OK)
+  async findOne(@Param('id') id: string): Promise<BookMotorResponse> {
+    return await this.bookMotorsService.findOne(id);
   }
 }

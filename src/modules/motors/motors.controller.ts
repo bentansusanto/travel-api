@@ -1,34 +1,66 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Put, HttpCode, HttpStatus } from '@nestjs/common';
 import { MotorsService } from './motors.service';
-import { CreateMotorDto } from './dto/create-motor.dto';
-import { UpdateMotorDto } from './dto/update-motor.dto';
+import { CreateMotorDto, UpdateMotorDto } from './dto/create-motor.dto';
+import { WebResponse } from 'src/types/response/response.type';
+import { Roles } from 'src/common/decorators/roles.decorator';
+import { Public } from 'src/common/decorators/public.decorator';
+
 
 @Controller('motors')
 export class MotorsController {
   constructor(private readonly motorsService: MotorsService) {}
 
-  @Post()
-  create(@Body() createMotorDto: CreateMotorDto) {
-    return this.motorsService.create(createMotorDto);
+  @Roles('owner, admin')
+  @Post('create')
+  @HttpCode(HttpStatus.CREATED)
+  async create(@Body() createMotorDto: CreateMotorDto):Promise<WebResponse> {
+    const result = await this.motorsService.create(createMotorDto);
+    return {
+      message: result.message,
+      data: result.data,
+    };
   }
 
-  @Get()
-  findAll() {
-    return this.motorsService.findAll();
+  @Public()
+  @Get('find-all')
+  @HttpCode(HttpStatus.OK)
+  async findAll():Promise<WebResponse> {
+    const result = await this.motorsService.findAll();
+    return {
+      message: result.message,
+      data: result.datas,
+    };
   }
 
+  @Public()
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.motorsService.findOne(+id);
+  @HttpCode(HttpStatus.OK)
+  async findOne(@Param('id') id: string):Promise<WebResponse> {
+    const result = await this.motorsService.findOne(id);
+    return {
+      message: result.message,
+      data: result.data,
+    };
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateMotorDto: UpdateMotorDto) {
-    return this.motorsService.update(+id, updateMotorDto);
+  @Roles('owner, admin')
+  @Put('update/:id')
+  @HttpCode(HttpStatus.OK)
+  async update(@Param('id') id: string, @Body() updateMotorDto: UpdateMotorDto):Promise<WebResponse> {
+    const result = await this.motorsService.update(id, updateMotorDto);
+    return {
+      message: result.message,
+      data: result.data,
+    };
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.motorsService.remove(+id);
+  @Roles('owner, admin')
+  @Delete('delete/:id')
+  @HttpCode(HttpStatus.OK)
+  async remove(@Param('id') id: string):Promise<WebResponse> {
+    const result = await this.motorsService.remove(id);
+    return {
+      message: result.message,
+    };
   }
 }

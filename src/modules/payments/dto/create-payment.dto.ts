@@ -1,10 +1,14 @@
-import { IsEnum, IsNotEmpty, IsString } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import { PaymentMethod } from '../entities/payment.entity';
 
 export class CreatePaymentDto {
-  @IsNotEmpty({ message: 'Book tour id is required' })
+  @IsOptional()
   @IsString({ message: 'Book tour id must be a string' })
-  book_tour_id: string;
+  book_tour_id?: string;
+
+  @IsOptional()
+  @IsString({ message: 'Book motor id must be a string' })
+  book_motor_id?: string;
 
   @IsNotEmpty({ message: 'Payment method is required' })
   @IsEnum(PaymentMethod, { message: 'Payment method must be a string' })

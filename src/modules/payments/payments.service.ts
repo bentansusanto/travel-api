@@ -8,7 +8,9 @@ import { PaymentResponse } from 'src/types/response/payment.type';
 import { Repository } from 'typeorm';
 import { Logger } from 'winston';
 import { BookToursService } from '../book-tours/book-tours.service';
+import { BookMotorsService } from '../book-motors/book-motors.service';
 import { StatusBookTour } from '../book-tours/entities/book-tour.entity';
+import { StatusBookMotor } from '../book-motors/entities/book-motor.entity';
 import { SalesService } from '../sales/sales.service';
 import { TouristsService } from '../tourists/tourists.service';
 import { UsersService } from '../users/users.service';
@@ -18,6 +20,7 @@ import {
   PaymentMethod,
   PaymentStatus,
 } from './entities/payment.entity';
+import { ServiceType } from './entities/service-type.enum';
 import { PaypalService } from './paypal.service';
 
 @Injectable()
@@ -25,6 +28,7 @@ export class PaymentsService {
   constructor(
     @Inject(WINSTON_MODULE_NEST_PROVIDER) private readonly logger: Logger,
     private readonly bookToursService: BookToursService,
+    private readonly bookMotorsService: BookMotorsService,
     private readonly usersService: UsersService,
     private readonly paypalService: PaypalService,
     private readonly touristService: TouristsService,
@@ -251,137 +255,139 @@ export class PaymentsService {
     createPaymentDto: CreatePaymentDto,
   ): Promise<PaymentResponse> {
     try {
-      // check user, booktour, tourist
-      const [findUser, findBookTour, findTourist] = await Promise.all([
-        this.usersService.findById(user_id),
-        this.bookToursService.findBookTourId(
-          createPaymentDto.book_tour_id,
-          user_id,
-        ),
-        this.touristService.findTouristByBookTour(
-          createPaymentDto.book_tour_id,
-        ),
-      ]);
+      const { book_tour_id, book_motor_id, currency, payment_method, exchange_rate } = createPaymentDto;
+
+      if (!book_tour_id && !book_motor_id) {
+        throw new HttpException('Booking ID is required', HttpStatus.BAD_REQUEST);
+      }
+
+      // 1. Validasi User
+      const findUser = await this.usersService.findById(user_id);
       if (!findUser) {
-        this.logger.error('User not found');
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
-      if (!findBookTour || findBookTour.data.user_id !== user_id) {
-        this.logger.error('Book tour not found');
-        throw new HttpException('Book tour not found', HttpStatus.NOT_FOUND);
+
+      let totalAmount = 0;
+      let serviceType: ServiceType;
+      let invoicePrefix: string;
+      let bookingData: any;
+
+      // 2. Load Booking Data & Calculate Amount
+      if (book_tour_id) {
+        const [findBookTour, findTourist] = await Promise.all([
+          this.bookToursService.findBookTourId(book_tour_id, user_id),
+          this.touristService.findTouristByBookTour(book_tour_id),
+        ]);
+
+        if (!findBookTour || findBookTour.data.user_id !== user_id) {
+          throw new HttpException('Book tour not found', HttpStatus.NOT_FOUND);
+        }
+
+        if (
+          findBookTour.data.status !== StatusBookTour.PENDING &&
+          findBookTour.data.status !== StatusBookTour.DRAFT
+        ) {
+          throw new HttpException('Book tour is already paid or cancelled', HttpStatus.BAD_REQUEST);
+        }
+
+        if (!findTourist) {
+          throw new HttpException('Tourist not found', HttpStatus.NOT_FOUND);
+        }
+
+        totalAmount = findBookTour.data.subtotal * findTourist.data.tourists.length;
+        serviceType = ServiceType.TOUR;
+        invoicePrefix = 'TOUR';
+        bookingData = findBookTour.data;
+      } else {
+        const findBookMotor = await this.bookMotorsService.findOne(book_motor_id);
+
+        if (!findBookMotor || findBookMotor.data.user_id !== user_id) {
+          throw new HttpException('Book motor not found', HttpStatus.NOT_FOUND);
+        }
+
+        if (findBookMotor.data.status !== StatusBookMotor.PENDING) {
+          throw new HttpException('Book motor is already paid or cancelled', HttpStatus.BAD_REQUEST);
+        }
+
+        totalAmount = findBookMotor.data.total_price;
+        serviceType = ServiceType.RENT_MOTOR;
+        invoicePrefix = 'RENT';
+        bookingData = findBookMotor.data;
       }
 
-      if (
-        findBookTour.data.status !== StatusBookTour.PENDING &&
-        findBookTour.data.status !== StatusBookTour.DRAFT
-      ) {
-        this.logger.error('Book tour is already paid');
-        throw new HttpException(
-          'Book tour is already paid',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
+      // 3. Generate Invoice Code
+      const invoiceCode = `${invoicePrefix}-${await this.generateOrderCode()}`;
 
-      if (!findTourist) {
-        this.logger.error('Tourist not found');
-        throw new HttpException('Tourist not found', HttpStatus.NOT_FOUND);
-      }
-      // invoice code tour
-      const invoiceCode = `TOUR-${await this.generateOrderCode()}`;
-
-      // calculate total amount
-      const totalAmout =
-        findBookTour.data.subtotal * findTourist.data.tourists.length;
-
-      // create payment
+      // 4. Create Payment Entity
       const newPayment = this.paymentsRepository.create({
         user: { id: user_id },
-        bookTour: { id: createPaymentDto.book_tour_id },
-        currency: createPaymentDto.currency,
-        payment_method: createPaymentDto.payment_method,
-        amount: totalAmout,
+        bookTour: book_tour_id ? { id: book_tour_id } : null,
+        bookMotor: book_motor_id ? { id: book_motor_id } : null,
+        currency: currency,
+        payment_method: payment_method,
+        amount: totalAmount,
         invoice_code: invoiceCode,
+        service_type: serviceType as ServiceType,
+        total_tourists: book_tour_id ? bookingData.items?.length : null, 
       });
       await this.paymentsRepository.save(newPayment);
 
-      // update book tour status
-      await this.bookToursService.updateStatusBookTour(
-        createPaymentDto.book_tour_id,
-        StatusBookTour.PENDING,
-      );
+      // 5. Update Booking Status to PENDING (if it was DRAFT)
+      if (book_tour_id) {
+        await this.bookToursService.updateStatusBookTour(book_tour_id, StatusBookTour.PENDING);
+      }
+      // Motor is already PENDING by default in create
 
-      // create condition for payment method
+      // 6. PayPal Logic
       let paymentPaypal: any;
-
-      switch (newPayment.payment_method) {
-        case PaymentMethod.PAYPAL:
-          paymentPaypal = await this.payPalOrder(
-            newPayment.id,
-            newPayment.amount,
-            newPayment.currency,
-            createPaymentDto.exchange_rate, // Pass exchange rate from frontend
-          );
-          await this.paymentsRepository.update(newPayment.id, {
-            redirect_url: paymentPaypal.approval_url,
-            transactionId: paymentPaypal.paypal_order_id,
-          });
-          break;
-        default:
-          throw new HttpException(
-            'Payment type not supported',
-            HttpStatus.BAD_REQUEST,
-          );
+      if (newPayment.payment_method === PaymentMethod.PAYPAL) {
+        paymentPaypal = await this.payPalOrder(
+          newPayment.id,
+          newPayment.amount,
+          newPayment.currency,
+          exchange_rate,
+        );
+        await this.paymentsRepository.update(newPayment.id, {
+          redirect_url: paymentPaypal.approval_url,
+          transactionId: paymentPaypal.paypal_order_id,
+        });
       }
 
-      // Send booking confirmation email to customer and admin
+      // 7. Email Logic (Simplified/Generic)
       try {
-        // Calculate USD amount if PayPal
         let totalAmountUSD: number | undefined;
-        let exchangeRate: number | undefined;
+        let rate: number | undefined;
 
-        if (
-          newPayment.payment_method === PaymentMethod.PAYPAL &&
-          newPayment.currency?.toUpperCase() !== 'USD'
-        ) {
-          // Get exchange rate from payment creation
-          if (createPaymentDto.exchange_rate) {
-            exchangeRate = 1 / createPaymentDto.exchange_rate; // Reverse to get IDR to USD rate
-            totalAmountUSD = totalAmout * createPaymentDto.exchange_rate;
+        if (payment_method === PaymentMethod.PAYPAL && currency?.toUpperCase() !== 'USD') {
+          if (exchange_rate) {
+            rate = 1 / exchange_rate;
+            totalAmountUSD = totalAmount * exchange_rate;
           } else {
-            // Fallback to conversion method
-            totalAmountUSD = await this.convertToUSD(
-              totalAmout,
-              newPayment.currency,
-            );
+            totalAmountUSD = await this.convertToUSD(totalAmount, currency);
           }
         }
 
+        // Generate dynamic details based on service type
         const orderDetails = await this.generateOrderDetailsHTML(
-          findBookTour.data.book_tour_items,
-          newPayment.currency,
-          createPaymentDto.exchange_rate, // Use frontend exchange rate
+          book_tour_id ? bookingData.book_tour_items : bookingData.items,
+          serviceType as ServiceType,
+          currency,
+          exchange_rate,
         );
 
         await this.emailService.sendOrderEmail(EmailType.SUCCESS_BOOKING, {
           email: findUser.data.email,
           orderCode: newPayment.invoice_code,
           orderDetails,
-          totalAmount: totalAmout,
+          totalAmount: totalAmount,
           totalAmountUSD,
           currency: newPayment.currency,
-          exchangeRate,
+          exchangeRate: rate,
           paymentMethod: newPayment.payment_method,
           links: paymentPaypal?.approval_url || undefined,
         });
-
-        this.logger.debug(
-          `Booking confirmation email sent for order: ${newPayment.invoice_code}`,
-        );
-      } catch (emailError: any) {
-        // Log error but don't fail the payment creation
-        this.logger.error(
-          `Failed to send booking email: ${emailError.message}`,
-        );
+      } catch (emailError) {
+        this.logger.error(`Failed to send booking email: ${emailError.message}`);
       }
 
       return {
@@ -390,8 +396,8 @@ export class PaymentsService {
           id: newPayment.id,
           user_id: newPayment.user.id,
           invoice_code: newPayment.invoice_code,
-          book_tour_id: newPayment.bookTour.id,
-          total_tourists: findTourist.data.tourists.length,
+          book_tour_id: newPayment.bookTour?.id,
+          book_motor_id: newPayment.bookMotor?.id,
           amount: newPayment.amount,
           currency: newPayment.currency,
           service_type: newPayment.service_type,
@@ -418,7 +424,7 @@ export class PaymentsService {
     try {
       const payment = await this.paymentsRepository.findOne({
         where: { transactionId: orderId },
-        relations: ['user', 'bookTour'],
+        relations: ['user', 'bookTour', 'bookMotor'],
       });
 
       if (!payment) {
@@ -434,26 +440,42 @@ export class PaymentsService {
         redirect_url: null,
       });
 
-      // update book tour status
-      await this.bookToursService.updateStatusBookTour(
-        payment.bookTour.id,
-        StatusBookTour.ONGOING,
-      );
+      // update booking status to ONGOING/CONFIRMED
+      if (payment.service_type === ServiceType.TOUR && payment.bookTour) {
+        await this.bookToursService.updateStatusBookTour(
+          payment.bookTour.id,
+          StatusBookTour.ONGOING,
+        );
+      } else if (payment.service_type === ServiceType.RENT_MOTOR && payment.bookMotor) {
+        // For motor, we might use COMPLETED or CONFIRMED? Usually CONFIRMED after payment.
+        // Looking at StatusBookMotor: PENDING, CONFIRMED, ONGOING, COMPLETED, CANCELLED.
+        await this.bookMotorsService.updateStatus(
+          payment.bookMotor.id,
+          StatusBookMotor.CONFIRMED,
+        );
+      }
 
       // Create sales record
       await this.salesService.createSaleFromPayment({
         payment_id: payment.id,
-        book_tour_id: payment.bookTour.id,
+        book_tour_id: payment.bookTour?.id,
+        book_motor_id: payment.bookMotor?.id,
         amount: payment.amount,
         currency: payment.currency,
+        service_type: payment.service_type,
       });
 
       // Send payment success email
       try {
-        const bookTourDetails = await this.bookToursService.findBookTourId(
-          payment.bookTour.id,
-          payment.user.id,
-        );
+        let bookingDetails: any;
+        if (payment.service_type === ServiceType.TOUR && payment.bookTour) {
+          bookingDetails = await this.bookToursService.findBookTourId(
+            payment.bookTour.id,
+            payment.user.id,
+          );
+        } else if (payment.service_type === ServiceType.RENT_MOTOR && payment.bookMotor) {
+          bookingDetails = await this.bookMotorsService.findOne(payment.bookMotor.id);
+        }
 
         // Calculate USD amount if PayPal
         let totalAmountUSD: number | undefined;
@@ -474,7 +496,8 @@ export class PaymentsService {
         }
 
         const orderDetails = await this.generateOrderDetailsHTML(
-          bookTourDetails.data.book_tour_items,
+          payment.service_type === ServiceType.TOUR ? bookingDetails.data.book_tour_items : bookingDetails.data.items,
+          payment.service_type,
           payment.currency,
           exchangeRate ? 1 / exchangeRate : undefined, // Convert to USD rate
         );
@@ -504,7 +527,8 @@ export class PaymentsService {
         data: {
           id: payment.id,
           user_id: payment.user.id,
-          book_tour_id: payment.bookTour.id,
+          book_tour_id: payment.bookTour?.id,
+          book_motor_id: payment.bookMotor?.id,
           amount: payment.amount,
           currency: payment.currency,
           service_type: payment.service_type,
@@ -579,7 +603,7 @@ export class PaymentsService {
       // Find payment by transaction ID (PayPal order ID)
       const payment = await this.paymentsRepository.findOne({
         where: { transactionId: orderId },
-        relations: ['bookTour', 'user'],
+        relations: ['bookTour', 'bookMotor', 'user'],
       });
 
       if (!payment) {
@@ -604,27 +628,41 @@ export class PaymentsService {
           payer_email: payerEmail,
         });
 
-        // Update book tour status to ONGOING
-        await this.bookToursService.updateStatusBookTour(
-          payment.bookTour.id,
-          StatusBookTour.ONGOING,
-        );
+        // Update booking status
+        if (payment.service_type === ServiceType.TOUR && payment.bookTour) {
+          await this.bookToursService.updateStatusBookTour(
+            payment.bookTour.id,
+            StatusBookTour.ONGOING,
+          );
+        } else if (payment.service_type === ServiceType.RENT_MOTOR && payment.bookMotor) {
+          await this.bookMotorsService.updateStatus(
+            payment.bookMotor.id,
+            StatusBookMotor.CONFIRMED,
+          );
+        }
 
         // Create sales record
         await this.salesService.createSaleFromPayment({
           id: payment.id,
-          book_tour_id: payment.bookTour.id,
+          book_tour_id: payment.bookTour?.id,
+          book_motor_id: payment.bookMotor?.id,
           amount: payment.amount,
           currency: payment.currency,
           payment_method: payment.payment_method,
+          service_type: payment.service_type,
         });
 
         // Send payment success email via webhook
         try {
-          const bookTourDetails = await this.bookToursService.findBookTourId(
-            payment.bookTour.id,
-            payment.user.id,
-          );
+          let bookingDetails: any;
+          if (payment.service_type === ServiceType.TOUR && payment.bookTour) {
+            bookingDetails = await this.bookToursService.findBookTourId(
+              payment.bookTour.id,
+              payment.user.id,
+            );
+          } else if (payment.service_type === ServiceType.RENT_MOTOR && payment.bookMotor) {
+            bookingDetails = await this.bookMotorsService.findOne(payment.bookMotor.id);
+          }
 
           // Calculate USD amount if PayPal
           let totalAmountUSD: number | undefined;
@@ -645,7 +683,8 @@ export class PaymentsService {
           }
 
           const orderDetails = await this.generateOrderDetailsHTML(
-            bookTourDetails.data.book_tour_items,
+            payment.service_type === ServiceType.TOUR ? bookingDetails.data.book_tour_items : bookingDetails.data.items,
+            payment.service_type,
             payment.currency,
             exchangeRate ? 1 / exchangeRate : undefined, // Convert to USD rate
           );
@@ -727,7 +766,7 @@ export class PaymentsService {
       this.logger.debug(`Attempting to find all payments for user: ${userId}`);
       const payments = await this.paymentsRepository.find({
         where: { user: { id: userId } },
-        relations: ['bookTour', 'user'],
+        relations: ['bookTour', 'bookMotor', 'user'],
       });
 
       this.logger.debug(`Found ${payments?.length || 0} payments in database`);
@@ -792,6 +831,10 @@ export class PaymentsService {
           'bookTour.book_tour_items.destination.state.country',
           'bookTour.tourists',
           'bookTour.country',
+          'bookMotor',
+          'bookMotor.book_motor_items',
+          'bookMotor.book_motor_items.motor',
+          'bookMotor.book_motor_items.motor.translations',
         ],
       });
 
@@ -892,7 +935,7 @@ export class PaymentsService {
   async finAllPaymentUser(): Promise<PaymentResponse> {
     try {
       const payments = await this.paymentsRepository.find({
-        relations: ['user', 'bookTour', 'bookTour.book_tour_items'],
+        relations: ['user', 'bookTour', 'bookMotor', 'bookTour.book_tour_items', 'bookMotor.book_motor_items'],
       });
 
       if (!payments || payments.length === 0) {
@@ -960,7 +1003,7 @@ export class PaymentsService {
       // Find payment with relations
       const payment = await this.paymentsRepository.findOne({
         where: { id },
-        relations: ['user', 'bookTour'],
+        relations: ['user', 'bookTour', 'bookMotor'],
       });
 
       if (!payment) {
@@ -1026,14 +1069,16 @@ export class PaymentsService {
         redirect_url: null, // Clear redirect URL
       });
 
-      // Reset book tour status to DRAFT so user can try again
-      if (payment.bookTour) {
+      // Reset book status to DRAFT so user can try again
+      if (payment.service_type === ServiceType.TOUR && payment.bookTour) {
         await this.bookToursService.updateStatusBookTour(
           payment.bookTour.id,
           StatusBookTour.DRAFT,
         );
-        this.logger.debug(
-          `Book tour ${payment.bookTour.id} status reset to DRAFT`,
+      } else if (payment.service_type === ServiceType.RENT_MOTOR && payment.bookMotor) {
+        await this.bookMotorsService.updateStatus(
+          payment.bookMotor.id,
+          StatusBookMotor.PENDING, // Or keep as PENDING for motor?
         );
       }
 
@@ -1078,50 +1123,73 @@ export class PaymentsService {
    * @param exchangeRate - Exchange rate for conversion (optional)
    */
   private async generateOrderDetailsHTML(
-    bookTourItems: any[],
+    items: any[],
+    serviceType: ServiceType,
     currency?: string,
     exchangeRate?: number,
   ): Promise<string> {
-    if (!bookTourItems || bookTourItems.length === 0) {
-      return '<p>No tour items</p>';
+    if (!items || items.length === 0) {
+      return `<p>No ${serviceType === ServiceType.TOUR ? 'tour' : 'motor'} items</p>`;
     }
 
     const normalizedCurrency = currency?.toUpperCase() || 'IDR';
     const isUSD = normalizedCurrency === 'USD';
 
     const itemsHTML = await Promise.all(
-      bookTourItems.map(async (item, index) => {
-        const translation =
-          item.destination?.translations?.find(
-            (t: any) => t.language_code === 'id',
-          ) || item.destination?.translations?.[0];
+      items.map(async (item: any, index: number) => {
+        if (serviceType === ServiceType.TOUR) {
+          const translation =
+            item.destination?.translations?.find(
+              (t: any) => t.language_code === 'id',
+            ) || item.destination?.translations?.[0];
 
-        const destinationName = translation?.name || 'Unknown Destination';
-        const priceIDR = item.destination?.price || 0;
-        const location = item.destination?.location || 'Unknown Location';
-        const visitDate = item.visit_date || 'Not specified';
+          const name = translation?.name || 'Unknown Destination';
+          const priceIDR = item.destination?.price || 0;
+          const location = item.destination?.location || 'Unknown Location';
+          const visitDate = item.visit_date || 'Not specified';
 
-        // Format price based on currency
-        let priceDisplay = '';
-        if (isUSD) {
-          // Convert to USD
-          const priceUSD = exchangeRate
-            ? priceIDR * exchangeRate
-            : await this.convertToUSD(priceIDR, 'IDR');
-          priceDisplay = `💰 $ ${priceUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          let priceDisplay = '';
+          if (isUSD) {
+            const priceUSD = exchangeRate
+              ? priceIDR * exchangeRate
+              : await this.convertToUSD(priceIDR, 'IDR');
+            priceDisplay = `💰 $ ${priceUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          } else {
+            priceDisplay = `💰 Rp ${priceIDR.toLocaleString('id-ID')}`;
+          }
+
+          return `
+            <div style="margin-bottom: 15px; padding: 10px; border-left: 3px solid #f67f00;">
+              <p style="margin: 5px 0;"><strong>${index + 1}. ${name}</strong></p>
+              <p style="margin: 5px 0; color: #666;">📍 ${location}</p>
+              <p style="margin: 5px 0; color: #666;">📅 Visit Date: ${visitDate}</p>
+              <p style="margin: 5px 0; color: #f67f00; font-weight: bold;">${priceDisplay}</p>
+            </div>
+          `;
         } else {
-          // Display in IDR
-          priceDisplay = `💰 Rp ${priceIDR.toLocaleString('id-ID')}`;
-        }
+          // MOTOR RENTAL
+          const motorName = item.motor?.translations?.[0]?.name_motor || 'Motor Rental';
+          const priceIDR = item.price || 0;
+          const quantity = item.quantity || 1;
 
-        return `
-          <div style="margin-bottom: 15px; padding: 10px; border-left: 3px solid #f67f00;">
-            <p style="margin: 5px 0;"><strong>${index + 1}. ${destinationName}</strong></p>
-            <p style="margin: 5px 0; color: #666;">📍 ${location}</p>
-            <p style="margin: 5px 0; color: #666;">📅 Visit Date: ${visitDate}</p>
-            <p style="margin: 5px 0; color: #f67f00; font-weight: bold;">${priceDisplay}</p>
-          </div>
-        `;
+          let priceDisplay = '';
+          if (isUSD) {
+            const priceUSD = exchangeRate
+              ? priceIDR * exchangeRate
+              : await this.convertToUSD(priceIDR, 'IDR');
+            priceDisplay = `💰 $ ${priceUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+          } else {
+            priceDisplay = `💰 Rp ${priceIDR.toLocaleString('id-ID')}`;
+          }
+
+          return `
+            <div style="margin-bottom: 15px; padding: 10px; border-left: 3px solid #00a8ff;">
+              <p style="margin: 5px 0;"><strong>${index + 1}. ${motorName}</strong></p>
+              <p style="margin: 5px 0; color: #666;">🔢 Quantity: ${quantity}</p>
+              <p style="margin: 5px 0; color: #00a8ff; font-weight: bold;">${priceDisplay}</p>
+            </div>
+          `;
+        }
       }),
     );
 

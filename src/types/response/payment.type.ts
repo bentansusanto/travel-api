@@ -6,6 +6,8 @@ export class PaymentData {
   user?: any; // User details object
   book_tour_id?: string;
   book_tour?: any; // BookTour details with items and tourists
+  book_motor_id?: string;
+  book_motor?: any; // BookMotor details
   total_tourists?: number;
   invoice_code?: string;
   amount: number;
