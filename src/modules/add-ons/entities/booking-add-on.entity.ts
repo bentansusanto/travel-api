@@ -14,6 +14,15 @@ import { AddOn } from './add-on.entity';
 import { BookMotor } from '../../book-motors/entities/book-motor.entity';
 import { BookTour } from '../../book-tours/entities/book-tour.entity';
 
+export class ColumnNumericTransformer {
+  to(data: number): number {
+    return data;
+  }
+  from(data: string): number {
+    return parseFloat(data);
+  }
+}
+
 @Entity('booking_add_ons')
 export class BookingAddOn {
   @PrimaryColumn()
@@ -46,6 +55,7 @@ export class BookingAddOn {
     precision: 10,
     scale: 2,
     default: 0,
+    transformer: new ColumnNumericTransformer(),
   })
   price_at_booking: number;
 

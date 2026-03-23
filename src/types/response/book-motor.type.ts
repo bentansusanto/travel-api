@@ -17,6 +17,13 @@ export class BookMotorTouristData {
   phone_number?: string;
 }
 
+export class BookingAddOnData {
+  id: string;
+  add_on_id: string;
+  name: string;
+  price: number;
+}
+
 export class BookMotorData {
   id: string;
   user_id: string;
@@ -24,8 +31,9 @@ export class BookMotorData {
   end_date: Date;
   total_price: number;
   status: StatusBookMotor;
-  items: BookMotorItemData[];
+  book_motor_items: BookMotorItemData[];
   tourists: BookMotorTouristData[];
+  booking_add_ons: BookingAddOnData[];
   created_at: Date;
   updated_at: Date;
 }

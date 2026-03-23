@@ -10,7 +10,7 @@ async function bootstrap() {
   app.useGlobalGuards(app.get(AuthGuard), app.get(RolesGuard));
   app.setGlobalPrefix('api/v1');
   app.useGlobalFilters(new ErrorsService());
-  // app.useGlobalPipes(new ValidationPipe());
+  app.useGlobalPipes(new ValidationPipe({ transform: true }));
   app.use(cookieParser());
   const origins = [
     'http://localhost:3200',
@@ -20,6 +20,7 @@ async function bootstrap() {
     'https://pacifictravelindo.com',
     'https://www.pacifictravelindo.com',
     'https://pasifik.my.id',
+    'https://www.pasifik.my.id',
   ];
   app.enableCors({
     origin: function (origin, callback) {

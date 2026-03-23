@@ -11,6 +11,10 @@ export class CreateAddOnDto {
   @IsNumber({}, { message: 'Price must be a number' })
   price: number;
 
+  @IsOptional()
+  @IsNumber({}, { message: 'Max price must be a number' })
+  max_price?: number;
+
   @IsNotEmpty({ message: 'Category is required' })
   @IsEnum(AddOnCategory, { message: 'Category must be a valid enum' })
   category: AddOnCategory;

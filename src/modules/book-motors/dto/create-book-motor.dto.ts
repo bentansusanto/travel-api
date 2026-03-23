@@ -1,5 +1,6 @@
-import { IsArray, IsDateString, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
+import { IsArray, IsDateString, IsEnum, IsNotEmpty, IsNumber, IsOptional, IsString, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
+import { Gender } from 'src/modules/tourists/entities/tourist.entity';
 
 class BookMotorItemDto {
   @IsNotEmpty()
@@ -23,6 +24,14 @@ class TouristDto {
   @IsOptional()
   @IsString()
   phone_number?: string;
+
+  @IsNotEmpty()
+  @IsEnum(Gender)
+  gender: Gender;
+
+  @IsNotEmpty()
+  @IsString()
+  nationality: string;
 }
 
 export class CreateBookMotorDto {
@@ -45,4 +54,9 @@ export class CreateBookMotorDto {
   @IsNotEmpty()
   @IsDateString()
   end_date: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  add_ons?: string[];
 }

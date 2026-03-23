@@ -23,6 +23,7 @@ export class MereksService {
       });
 
       if (existingMerek) {
+        this.logger.error(`Merek with name ${createMerekDto.name_merek} already exists`);
         throw new HttpException(
           `Merek with name ${createMerekDto.name_merek} already exists`,
           HttpStatus.CONFLICT,
@@ -30,21 +31,21 @@ export class MereksService {
       }
 
       const merek = this.merekRepository.create(createMerekDto);
-      const savedMerek = await this.merekRepository.save(merek);
+       await this.merekRepository.save(merek);
 
       this.logger.debug('Success create merek');
 
       return {
         message: 'Merek created successfully',
         data: {
-          id: savedMerek.id,
-          name_merek: savedMerek.name_merek,
-          createdAt: savedMerek.created_at,
-          updatedAt: savedMerek.updated_at,
+          id: merek.id,
+          name_merek: merek.name_merek,
+          createdAt: merek.created_at,
+          updatedAt: merek.updated_at,
         },
       };
     } catch (error) {
-      this.logger.error('Error create merek', error);
+      this.logger.error('Error create merek', error.stack);
       if (error instanceof HttpException) {
         throw error;
       }

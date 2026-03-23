@@ -171,4 +171,35 @@ export class AddOnsService {
       );
     }
   }
+
+  async findByCategory(category: string): Promise<AddOnResponse> {
+    try {
+      const addOns = await this.addOnRepository.find({
+        where: { category: category as any },
+      });
+
+      this.logger.debug(`Success find add-ons by category ${category}`);
+
+      return {
+        message: 'Add-ons found successfully',
+        datas: addOns as any,
+      };
+    } catch (error) {
+      this.logger.error('Error find add-ons by category', error);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        {
+          Error: [
+            {
+              field: 'general',
+              body: 'Error during find add-ons by category',
+            },
+          ],
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
 }

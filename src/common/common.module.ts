@@ -57,6 +57,7 @@ import { BookMotorItem } from 'src/modules/book-motors/entities/book-motor-item.
         ssl: false,
         extra: {
           connectionLimit: 10,
+          collation: 'utf8mb4_0900_ai_ci',
           ssl: false,
         },
         connectTimeout: 60000,

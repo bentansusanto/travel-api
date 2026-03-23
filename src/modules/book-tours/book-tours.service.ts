@@ -9,8 +9,11 @@ import { Logger } from 'winston';
 import { DestinationService } from '../destination/destination.service';
 import { UsersService } from '../users/users.service';
 import { CreateBookTourDto } from './dto/create-book-tour.dto';
+import { UpdateBookTourDto } from './dto/update-book-tour.dto';
 import { BookTourItems } from './entities/book-tour-items.entity';
 import { BookTour, StatusBookTour } from './entities/book-tour.entity';
+import { AddOn } from '../add-ons/entities/add-on.entity';
+import { BookingAddOn } from '../add-ons/entities/booking-add-on.entity';
 
 @Injectable()
 export class BookToursService {
@@ -24,6 +27,10 @@ export class BookToursService {
     private readonly bookTourRepository: Repository<BookTour>,
     @InjectRepository(BookTourItems)
     private readonly bookTourItemsRepository: Repository<BookTourItems>,
+    @InjectRepository(AddOn)
+    private readonly addOnRepository: Repository<AddOn>,
+    @InjectRepository(BookingAddOn)
+    private readonly bookingAddOnRepository: Repository<BookingAddOn>,
   ) {}
 
   // Create Book Tour
@@ -201,6 +208,25 @@ export class BookToursService {
 
       await this.bookTourItemsRepository.save(bookTourItem);
 
+      // 5. Add add-ons if provided
+      if (createBookTourDto.add_ons && createBookTourDto.add_ons.length > 0) {
+        for (const addOnId of createBookTourDto.add_ons) {
+          const addOn = await this.addOnRepository.findOne({ where: { id: addOnId } });
+          if (addOn) {
+            const bookingAddOn = this.bookingAddOnRepository.create({
+              book_tour: { id: bookTour.id },
+              add_on: addOn,
+              price_at_booking: addOn.price,
+            });
+            await this.bookingAddOnRepository.save(bookingAddOn);
+            
+            // Update subtotal
+            bookTour.subtotal = Number(bookTour.subtotal) + Number(addOn.price);
+            await this.bookTourRepository.save(bookTour);
+          }
+        }
+      }
+
       const findBookTour = await this.bookTourRepository.findOne({
         where: {
           id: bookTour.id,
@@ -209,11 +235,13 @@ export class BookToursService {
           'book_tour_items',
           'user',
           'country',
-          'state', // Include state relation
+          'state',
           'book_tour_items.destination',
           'book_tour_items.destination.translations',
           'book_tour_items.destination.state',
           'book_tour_items.destination.state.country',
+          'add_ons',
+          'add_ons.add_on',
         ],
       });
 
@@ -234,6 +262,12 @@ export class BookToursService {
           subtotal: findBookTour.subtotal,
           created_at: findBookTour.created_at,
           updated_at: findBookTour.updated_at,
+          booking_add_ons: (findBookTour.add_ons || []).map(ba => ({
+            id: ba.id,
+            add_on_id: ba.add_on?.id,
+            name: ba.add_on?.name,
+            price: Number(ba.price_at_booking)
+          })),
           book_tour_items: (findBookTour.book_tour_items || []).map((item) => ({
             id: item.id,
             destination_id: item.destination?.id,
@@ -319,6 +353,12 @@ export class BookToursService {
           subtotal: bookTour.subtotal,
           created_at: bookTour.created_at,
           updated_at: bookTour.updated_at,
+          booking_add_ons: (bookTour.add_ons || []).map((ba) => ({
+            id: ba.id,
+            add_on_id: ba.add_on?.id,
+            name: ba.add_on?.name,
+            price: Number(ba.price_at_booking),
+          })),
           book_tour_items: bookTour.book_tour_items.map((item) => ({
             id: item.id,
             destination_id: item.destination.id,
@@ -383,6 +423,8 @@ export class BookToursService {
           'book_tour_items.destination.translations',
           'book_tour_items.destination.state',
           'book_tour_items.destination.state.country',
+          'add_ons',
+          'add_ons.add_on',
         ],
         order: {
           book_tour_items: {
@@ -400,6 +442,12 @@ export class BookToursService {
           subtotal: bookTour.subtotal,
           created_at: bookTour.created_at,
           updated_at: bookTour.updated_at,
+          booking_add_ons: (bookTour.add_ons || []).map((ba) => ({
+            id: ba.id,
+            add_on_id: ba.add_on?.id,
+            name: ba.add_on?.name,
+            price: Number(ba.price_at_booking),
+          })),
           book_tour_items: bookTour.book_tour_items.map((item) => ({
             id: item.id,
             destination_id: item.destination.id,
@@ -483,6 +531,12 @@ export class BookToursService {
           subtotal: bookTour.subtotal,
           created_at: bookTour.created_at,
           updated_at: bookTour.updated_at,
+          booking_add_ons: (bookTour.add_ons || []).map((ba) => ({
+            id: ba.id,
+            add_on_id: ba.add_on?.id,
+            name: ba.add_on?.name,
+            price: Number(ba.price_at_booking),
+          })),
           book_tour_items: bookTour.book_tour_items.map((item) => ({
             id: item.id,
             destination_id: item.destination.id,
@@ -521,5 +575,68 @@ export class BookToursService {
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
+  }
+  // Update book tour
+  async update(
+    id: string,
+    userId: string,
+    updateBookTourDto: UpdateBookTourDto,
+  ): Promise<TourResponse> {
+    const bookTour = await this.bookTourRepository.findOne({
+      where: { id, user: { id: userId } },
+      relations: [
+        'add_ons',
+        'add_ons.add_on',
+        'book_tour_items',
+        'book_tour_items.destination',
+      ],
+    });
+
+    if (!bookTour) {
+      throw new HttpException('Book tour not found', HttpStatus.NOT_FOUND);
+    }
+
+    if (updateBookTourDto.status) {
+      bookTour.status = updateBookTourDto.status as any;
+    }
+
+    if (updateBookTourDto.add_ons) {
+      // Remove existing add-ons
+      if (bookTour.add_ons && bookTour.add_ons.length > 0) {
+        await this.bookingAddOnRepository.remove(bookTour.add_ons);
+      }
+
+      // Add new ones
+      let addOnsPrice = 0;
+      const newBookingAddOns: BookingAddOn[] = [];
+
+      for (const addOnId of updateBookTourDto.add_ons) {
+        const addOn = await this.addOnRepository.findOne({
+          where: { id: addOnId },
+        });
+        if (addOn) {
+          const bookingAddOn = new BookingAddOn();
+          bookingAddOn.book_tour = bookTour;
+          bookingAddOn.add_on = addOn;
+          bookingAddOn.price_at_booking = addOn.price;
+          newBookingAddOns.push(bookingAddOn);
+          addOnsPrice += Number(addOn.price);
+        }
+      }
+
+      if (newBookingAddOns.length > 0) {
+        await this.bookingAddOnRepository.save(newBookingAddOns);
+      }
+
+      // Recalculate subtotal
+      const itemsSubtotal = (bookTour.book_tour_items || []).reduce(
+        (acc, item) => acc + Number(item.destination?.price || 0),
+        0,
+      );
+      bookTour.subtotal = itemsSubtotal + addOnsPrice;
+    }
+
+    const updated = await this.bookTourRepository.save(bookTour);
+    return this.findBookTourId(updated.id, userId);
   }
 }
