@@ -8,6 +8,9 @@ import {
   JoinColumn,
   ManyToOne,
   PrimaryColumn,
+  CreateDateColumn,
+  UpdateDateColumn,
+  DeleteDateColumn
 } from 'typeorm';
 
 export enum Gender {
@@ -59,13 +62,13 @@ export class Tourist {
   @Column()
   passport_number: string;
 
-  @Column()
+  @CreateDateColumn()
   created_at: Date;
 
-  @Column()
+  @UpdateDateColumn()
   updated_at: Date;
 
-  @Column({
+  @DeleteDateColumn({
     nullable: true,
   })
   deleted_at: Date;

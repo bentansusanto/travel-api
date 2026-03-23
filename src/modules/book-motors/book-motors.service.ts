@@ -17,6 +17,8 @@ import { CreateBookMotorDto } from './dto/create-book-motor.dto';
 import { BookMotorItem } from './entities/book-motor-item.entity';
 import { BookMotor, StatusBookMotor } from './entities/book-motor.entity';
 import { BookMotorResponse, BookMotorData } from 'src/types/response/book-motor.type';
+import { AddOn } from '../add-ons/entities/add-on.entity';
+import { BookingAddOn } from '../add-ons/entities/booking-add-on.entity';
 
 @Injectable()
 export class BookMotorsService {
@@ -30,6 +32,10 @@ export class BookMotorsService {
     private readonly motorRepository: Repository<Motor>,
     @InjectRepository(Tourist)
     private readonly touristRepository: Repository<Tourist>,
+    @InjectRepository(AddOn)
+    private readonly addOnRepository: Repository<AddOn>,
+    @InjectRepository(BookingAddOn)
+    private readonly bookingAddOnRepository: Repository<BookingAddOn>,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -64,7 +70,7 @@ export class BookMotorsService {
       end_date: booking.end_date,
       total_price: Number(booking.total_price),
       status: booking.status,
-      items: booking.book_motor_items?.map(item => ({
+      book_motor_items: booking.book_motor_items?.map(item => ({
         id: item.id,
         motor_id: item.motor?.id,
         motor_name: item.motor?.translations?.[0]?.name_motor || 'N/A',
@@ -78,6 +84,12 @@ export class BookMotorsService {
         passport_number: t.passport_number,
         phone_number: t.phone_number
       })) || [],
+      booking_add_ons: booking.booking_add_ons?.map(ba => ({
+        id: ba.id,
+        add_on_id: ba.add_on?.id,
+        name: ba.add_on?.name,
+        price: Number(ba.price_at_booking)
+      })) || [],
       created_at: booking.created_at,
       updated_at: booking.updated_at
     };
@@ -89,7 +101,7 @@ export class BookMotorsService {
     await queryRunner.startTransaction();
 
     try {
-      const { items, tourists, start_date, end_date } = createBookMotorDto;
+      const { items, tourists, start_date, end_date, add_ons } = createBookMotorDto;
       const startDate = new Date(start_date);
       const endDate = new Date(end_date);
       const days = this.calculateRentalDays(startDate, endDate);
@@ -140,6 +152,11 @@ export class BookMotorsService {
           });
 
           await queryRunner.manager.save(bookItem);
+          
+          // Update motor availability to unavailable
+          motor.is_available = false;
+          await queryRunner.manager.save(motor);
+          
           grandTotal += subtotal;
         }
       }
@@ -153,6 +170,22 @@ export class BookMotorsService {
           });
         });
         await queryRunner.manager.save(touristEntities);
+      }
+      
+      // 4. Create Booking Add-ons
+      if (add_ons && add_ons.length > 0) {
+        for (const addOnId of add_ons) {
+          const addOn = await this.addOnRepository.findOne({ where: { id: addOnId } });
+          if (addOn) {
+            const bookingAddOn = this.bookingAddOnRepository.create({
+              book_motor: savedHeader,
+              add_on: addOn,
+              price_at_booking: addOn.price,
+            });
+            await queryRunner.manager.save(bookingAddOn);
+            grandTotal += Number(addOn.price);
+          }
+        }
       }
 
       // 4. Update Header with Grand Total
@@ -199,6 +232,8 @@ export class BookMotorsService {
         'book_motor_items.motor',
         'book_motor_items.motor.translations',
         'tourists',
+        'booking_add_ons',
+        'booking_add_ons.add_on',
         'user',
       ],
     });
@@ -214,6 +249,8 @@ export class BookMotorsService {
           'book_motor_items.motor',
           'book_motor_items.motor.translations',
           'tourists',
+          'booking_add_ons',
+          'booking_add_ons.add_on',
           'user',
         ],
       });
@@ -268,10 +305,43 @@ export class BookMotorsService {
   }
 
   async updateStatus(id: string, status: StatusBookMotor): Promise<void> {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
     try {
-      await this.bookMotorRepository.update(id, { status });
+      const booking = await queryRunner.manager.findOne(BookMotor, {
+        where: { id },
+        relations: ['book_motor_items', 'book_motor_items.motor'],
+      });
+
+      if (!booking) {
+        throw new NotFoundException('Booking not found');
+      }
+
+      // Update booking status
+      booking.status = status;
+      await queryRunner.manager.save(booking);
+
+      // Update motor availability
+      if (booking.book_motor_items && booking.book_motor_items.length > 0) {
+        const isAvailable =
+          status === StatusBookMotor.COMPLETED ||
+          status === StatusBookMotor.CANCELLED ||
+          status === StatusBookMotor.DRAFT;
+
+        for (const item of booking.book_motor_items) {
+          if (item.motor) {
+            item.motor.is_available = isAvailable;
+            await queryRunner.manager.save(item.motor);
+          }
+        }
+      }
+
+      await queryRunner.commitTransaction();
       this.logger.debug(`Booking ${id} status updated to ${status}`);
     } catch (error) {
+      await queryRunner.rollbackTransaction();
       this.logger.error('Error update booking status', error);
       if (error instanceof HttpException) {
         throw error;
@@ -287,6 +357,8 @@ export class BookMotorsService {
         },
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
+    } finally {
+      await queryRunner.release();
     }
   }
 }

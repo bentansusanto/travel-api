@@ -202,8 +202,8 @@ export class PaymentsService {
             },
           ],
           application_context: {
-            return_url: `${process.env.FRONTEND_URL || 'http://localhost:3200'}/en/payments/success`,
-            cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3200'}/en/payments`,
+            return_url: `${process.env.FRONTEND_URL || 'http://localhost:3200'}/en/payments/success/`,
+            cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:3200'}/en/payments/`,
             shipping_preference: 'NO_SHIPPING',
             user_action: 'PAY_NOW',
             brand_name: 'PacificTravelindo',
@@ -328,7 +328,7 @@ export class PaymentsService {
         amount: totalAmount,
         invoice_code: invoiceCode,
         service_type: serviceType as ServiceType,
-        total_tourists: book_tour_id ? bookingData.items?.length : null, 
+        total_tourists: book_tour_id ? bookingData.book_tour_items?.length : bookingData.book_motor_items?.length, 
       });
       await this.paymentsRepository.save(newPayment);
 
@@ -353,42 +353,45 @@ export class PaymentsService {
         });
       }
 
-      // 7. Email Logic (Simplified/Generic)
-      try {
-        let totalAmountUSD: number | undefined;
-        let rate: number | undefined;
+      // 7. Email Logic (Simplified/Generic) - Optimized: Fire and Forget
+      (async () => {
+        try {
+          let totalAmountUSD: number | undefined;
+          let rate: number | undefined;
 
-        if (payment_method === PaymentMethod.PAYPAL && currency?.toUpperCase() !== 'USD') {
-          if (exchange_rate) {
-            rate = 1 / exchange_rate;
-            totalAmountUSD = totalAmount * exchange_rate;
-          } else {
-            totalAmountUSD = await this.convertToUSD(totalAmount, currency);
+          if (payment_method === PaymentMethod.PAYPAL && currency?.toUpperCase() !== 'USD') {
+            if (exchange_rate) {
+              rate = 1 / exchange_rate;
+              totalAmountUSD = totalAmount * exchange_rate;
+            } else {
+              totalAmountUSD = await this.convertToUSD(totalAmount, currency);
+            }
           }
+
+          // Generate dynamic details based on service type
+          const orderDetails = await this.generateOrderDetailsHTML(
+            book_tour_id ? bookingData.book_tour_items : bookingData.book_motor_items,
+            serviceType as ServiceType,
+            currency,
+            exchange_rate,
+            bookingData.booking_add_ons,
+          );
+
+          await this.emailService.sendOrderEmail(EmailType.SUCCESS_BOOKING, {
+            email: findUser.data.email,
+            orderCode: newPayment.invoice_code,
+            orderDetails,
+            totalAmount: totalAmount,
+            totalAmountUSD,
+            currency: newPayment.currency,
+            exchangeRate: rate,
+            paymentMethod: newPayment.payment_method,
+            links: paymentPaypal?.approval_url || undefined,
+          });
+        } catch (emailError) {
+          this.logger.error(`Failed to send booking email: ${emailError.message}`);
         }
-
-        // Generate dynamic details based on service type
-        const orderDetails = await this.generateOrderDetailsHTML(
-          book_tour_id ? bookingData.book_tour_items : bookingData.items,
-          serviceType as ServiceType,
-          currency,
-          exchange_rate,
-        );
-
-        await this.emailService.sendOrderEmail(EmailType.SUCCESS_BOOKING, {
-          email: findUser.data.email,
-          orderCode: newPayment.invoice_code,
-          orderDetails,
-          totalAmount: totalAmount,
-          totalAmountUSD,
-          currency: newPayment.currency,
-          exchangeRate: rate,
-          paymentMethod: newPayment.payment_method,
-          links: paymentPaypal?.approval_url || undefined,
-        });
-      } catch (emailError) {
-        this.logger.error(`Failed to send booking email: ${emailError.message}`);
-      }
+      })();
 
       return {
         message: 'Success creating payment',
@@ -451,7 +454,7 @@ export class PaymentsService {
         // Looking at StatusBookMotor: PENDING, CONFIRMED, ONGOING, COMPLETED, CANCELLED.
         await this.bookMotorsService.updateStatus(
           payment.bookMotor.id,
-          StatusBookMotor.CONFIRMED,
+          StatusBookMotor.ONGOING,
         );
       }
 
@@ -496,29 +499,39 @@ export class PaymentsService {
         }
 
         const orderDetails = await this.generateOrderDetailsHTML(
-          payment.service_type === ServiceType.TOUR ? bookingDetails.data.book_tour_items : bookingDetails.data.items,
+          payment.service_type === ServiceType.TOUR ? bookingDetails.data.book_tour_items : bookingDetails.data.book_motor_items,
           payment.service_type,
           payment.currency,
           exchangeRate ? 1 / exchangeRate : undefined, // Convert to USD rate
+          bookingDetails.data.booking_add_ons,
         );
 
-        await this.emailService.sendOrderEmail(EmailType.SUCCESS_PAYMENT, {
-          email: payment.user.email,
-          orderCode: payment.invoice_code,
-          orderDetails,
-          totalAmount: payment.amount,
-          totalAmountUSD,
-          currency: payment.currency,
-          exchangeRate,
-          paymentMethod: payment.payment_method,
-        });
+        // Fire and forget email sending
+        (async () => {
+          try {
+            await this.emailService.sendOrderEmail(EmailType.SUCCESS_PAYMENT, {
+              email: payment.user.email,
+              orderCode: payment.invoice_code,
+              orderDetails,
+              totalAmount: payment.amount,
+              totalAmountUSD,
+              currency: payment.currency,
+              exchangeRate,
+              paymentMethod: payment.payment_method,
+            });
 
-        this.logger.debug(
-          `Payment success email sent for order: ${payment.invoice_code}`,
-        );
+            this.logger.debug(
+              `Payment success email sent for order: ${payment.invoice_code}`,
+            );
+          } catch (emailError: any) {
+            this.logger.error(
+              `Failed to send payment success email: ${emailError.message}`,
+            );
+          }
+        })();
       } catch (emailError: any) {
         this.logger.error(
-          `Failed to send payment success email: ${emailError.message}`,
+          `Failed to prepare payment success email: ${emailError.message}`,
         );
       }
 
@@ -527,6 +540,7 @@ export class PaymentsService {
         data: {
           id: payment.id,
           user_id: payment.user.id,
+          invoice_code: payment.invoice_code,
           book_tour_id: payment.bookTour?.id,
           book_motor_id: payment.bookMotor?.id,
           amount: payment.amount,
@@ -637,7 +651,7 @@ export class PaymentsService {
         } else if (payment.service_type === ServiceType.RENT_MOTOR && payment.bookMotor) {
           await this.bookMotorsService.updateStatus(
             payment.bookMotor.id,
-            StatusBookMotor.CONFIRMED,
+            StatusBookMotor.ONGOING,
           );
         }
 
@@ -683,29 +697,39 @@ export class PaymentsService {
           }
 
           const orderDetails = await this.generateOrderDetailsHTML(
-            payment.service_type === ServiceType.TOUR ? bookingDetails.data.book_tour_items : bookingDetails.data.items,
+            payment.service_type === ServiceType.TOUR ? bookingDetails.data.book_tour_items : bookingDetails.data.book_motor_items,
             payment.service_type,
             payment.currency,
             exchangeRate ? 1 / exchangeRate : undefined, // Convert to USD rate
+            bookingDetails.data.booking_add_ons,
           );
 
-          await this.emailService.sendOrderEmail(EmailType.SUCCESS_PAYMENT, {
-            email: payment.user.email,
-            orderCode: payment.invoice_code,
-            orderDetails,
-            totalAmount: payment.amount,
-            totalAmountUSD,
-            currency: payment.currency,
-            exchangeRate,
-            paymentMethod: payment.payment_method,
-          });
+          // Fire and forget email sending via webhook
+          (async () => {
+            try {
+              await this.emailService.sendOrderEmail(EmailType.SUCCESS_PAYMENT, {
+                email: payment.user.email,
+                orderCode: payment.invoice_code,
+                orderDetails,
+                totalAmount: payment.amount,
+                totalAmountUSD,
+                currency: payment.currency,
+                exchangeRate,
+                paymentMethod: payment.payment_method,
+              });
 
-          this.logger.debug(
-            `Payment success email sent via webhook for order: ${payment.invoice_code}`,
-          );
+              this.logger.debug(
+                `Payment success email sent via webhook for order: ${payment.invoice_code}`,
+              );
+            } catch (emailError: any) {
+              this.logger.error(
+                `Failed to send payment success email via webhook: ${emailError.message}`,
+              );
+            }
+          })();
         } catch (emailError: any) {
           this.logger.error(
-            `Failed to send payment success email via webhook: ${emailError.message}`,
+            `Failed to prepare payment success email via webhook: ${emailError.message}`,
           );
         }
 
@@ -794,6 +818,7 @@ export class PaymentsService {
           user_id: payment.user?.id || '',
           invoice_code: payment.invoice_code,
           book_tour_id: payment.bookTour?.id || '',
+          book_motor_id: payment.bookMotor?.id || '',
           total_tourists: payment.total_tourists,
           amount: payment.amount,
           currency: payment.currency,
@@ -859,6 +884,7 @@ export class PaymentsService {
             : null,
           invoice_code: payment.invoice_code,
           book_tour_id: payment.bookTour?.id,
+          book_motor_id: payment.bookMotor?.id,
           book_tour: payment.bookTour
             ? {
                 id: payment.bookTour.id,
@@ -907,6 +933,13 @@ export class PaymentsService {
                       passport_number: tourist.passport_number,
                     }))
                   : [],
+              }
+            : null,
+          book_motor: payment.bookMotor
+            ? {
+                id: payment.bookMotor.id,
+                status: payment.bookMotor.status,
+                // Add items if needed in future
               }
             : null,
           total_tourists: payment.total_tourists,
@@ -962,10 +995,17 @@ export class PaymentsService {
             : null,
           invoice_code: payment.invoice_code,
           book_tour_id: payment.bookTour?.id,
+          book_motor_id: payment.bookMotor?.id,
           book_tour: payment.bookTour
             ? {
                 id: payment.bookTour.id,
                 book_tour_items: payment.bookTour.book_tour_items || [],
+              }
+            : null,
+          book_motor: payment.bookMotor
+            ? {
+                id: payment.bookMotor.id,
+                book_motor_items: payment.bookMotor.book_motor_items || [],
               }
             : null,
           total_tourists: payment.total_tourists,
@@ -1127,6 +1167,7 @@ export class PaymentsService {
     serviceType: ServiceType,
     currency?: string,
     exchangeRate?: number,
+    addOns: any[] = [],
   ): Promise<string> {
     if (!items || items.length === 0) {
       return `<p>No ${serviceType === ServiceType.TOUR ? 'tour' : 'motor'} items</p>`;
@@ -1168,9 +1209,9 @@ export class PaymentsService {
           `;
         } else {
           // MOTOR RENTAL
-          const motorName = item.motor?.translations?.[0]?.name_motor || 'Motor Rental';
+          const motorName = item.motor_name || item.motor?.translations?.[0]?.name_motor || 'Motor Rental';
           const priceIDR = item.price || 0;
-          const quantity = item.quantity || 1;
+          const quantity = item.qty || item.quantity || 1;
 
           let priceDisplay = '';
           if (isUSD) {
@@ -1193,6 +1234,31 @@ export class PaymentsService {
       }),
     );
 
-    return itemsHTML.join('');
+    // Add-ons Section
+    let addOnsHTML = '';
+    if (addOns && addOns.length > 0) {
+      addOnsHTML = `
+        <div style="margin-top: 20px; border-top: 1px dashed #ddd; pt: 10px;">
+          <h4 style="margin-bottom: 10px; color: #333;">Add-ons:</h4>
+          ${await Promise.all(
+            addOns.map(async (addOn: any) => {
+              const priceIDR = addOn.price || 0;
+              let priceDisplay = '';
+              if (isUSD) {
+                const priceUSD = exchangeRate
+                  ? priceIDR * exchangeRate
+                  : await this.convertToUSD(priceIDR, 'IDR');
+                priceDisplay = `$ ${priceUSD.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+              } else {
+                priceDisplay = `Rp ${priceIDR.toLocaleString('id-ID')}`;
+              }
+              return `<p style="margin: 3px 0; font-size: 14px;">• ${addOn.name}: <span style="color: #666;">${priceDisplay}</span></p>`;
+            }),
+          ).then((parts) => parts.join(''))}
+        </div>
+      `;
+    }
+
+    return itemsHTML.join('') + addOnsHTML;
   }
 }

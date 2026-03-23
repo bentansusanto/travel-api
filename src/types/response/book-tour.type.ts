@@ -1,4 +1,5 @@
 import { StatusBookTour } from 'src/modules/book-tours/entities/book-tour.entity';
+import { BookingAddOnData } from './book-motor.type';
 import { ResponseModel } from './response.type';
 
 export class TourResponseData {
@@ -12,6 +13,7 @@ export class TourResponseData {
   }[];
   subtotal: number;
   status: StatusBookTour;
+  booking_add_ons: BookingAddOnData[];
   created_at?: Date;
   updated_at?: Date;
 }

@@ -21,6 +21,7 @@ import { Payment } from 'src/modules/payments/entities/payment.entity';
 import { Sale } from 'src/modules/sales/entities/sale.entity';
 
 export enum StatusBookMotor {
+  DRAFT = 'draft',
   PENDING = 'pending',
   CONFIRMED = 'confirmed',
   ONGOING = 'ongoing',

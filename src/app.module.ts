@@ -13,6 +13,7 @@ import { TouristsModule } from './modules/tourists/tourists.module';
 import { RolesModule } from './modules/users/roles/roles.module';
 import { UsersModule } from './modules/users/users.module';
 import { RecommendationsModule } from './modules/recommendations/recommendations.module';
+import { MereksModule } from './modules/motors/mereks/mereks.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { RecommendationsModule } from './modules/recommendations/recommendations
     RolesModule,
     MotorsModule,
     RecommendationsModule,
+    MereksModule,
   ],
   controllers: [AppController],
   providers: [AppService],

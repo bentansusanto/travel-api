@@ -13,6 +13,7 @@ import { CurrentUser } from 'src/common/decorators/user.decorator';
 import { WebResponse } from 'src/types/response/response.type';
 import { BookToursService } from './book-tours.service';
 import { CreateBookTourDto } from './dto/create-book-tour.dto';
+import { UpdateBookTourDto } from './dto/update-book-tour.dto';
 
 @Controller('book-tours')
 export class BookToursController {
@@ -70,6 +71,25 @@ export class BookToursController {
     const result = await this.bookToursService.updateStatusBookTour(
       id,
       body.status as any,
+    );
+    return {
+      message: result.message,
+      data: result.data,
+    };
+  }
+
+  @Roles('traveller')
+  @Put('update/:id')
+  @HttpCode(HttpStatus.OK)
+  async update(
+    @CurrentUser() user: any,
+    @Param('id') id: string,
+    @Body() updateBookTourDto: UpdateBookTourDto,
+  ): Promise<WebResponse> {
+    const result = await this.bookToursService.update(
+      id,
+      user.id,
+      updateBookTourDto,
     );
     return {
       message: result.message,

@@ -9,9 +9,8 @@ import { Public } from 'src/common/decorators/public.decorator';
 export class MereksController {
   constructor(private readonly mereksService: MereksService) {}
 
-  @Roles('admin')
+  @Roles('owner', 'admin', 'developer')
   @Post('create')
-  @HttpCode(HttpStatus.CREATED)
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() createMerekDto: CreateMerekDto):Promise<WebResponse> {
     const result = await this.mereksService.create(createMerekDto);
@@ -43,7 +42,7 @@ export class MereksController {
     };
   }
 
-  @Roles('admin')
+  @Roles('owner', 'admin', 'developer')
   @Put('update/:id')
   @HttpCode(HttpStatus.OK)
   async update(@Param('id') id: string, @Body() updateMerekDto: UpdateMerekDto): Promise<WebResponse> {
@@ -54,7 +53,7 @@ export class MereksController {
     };
   }
 
-  @Roles('admin')
+  @Roles('owner', 'admin', 'developer')
   @Delete('delete/:id')
   @HttpCode(HttpStatus.OK)
   async remove(@Param('id') id: string): Promise<WebResponse> {

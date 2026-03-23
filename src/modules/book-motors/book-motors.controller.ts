@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Put,
 } from '@nestjs/common';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { CurrentUser } from 'src/common/decorators/user.decorator';
@@ -19,7 +20,7 @@ import { CreateBookMotorDto } from './dto/create-book-motor.dto';
 export class BookMotorsController {
   constructor(private readonly bookMotorsService: BookMotorsService) {}
 
-  @Roles('tourist')
+  @Roles('traveller')
   @Post('create')
   @HttpCode(HttpStatus.CREATED)
   async create(
@@ -46,5 +47,18 @@ export class BookMotorsController {
   @HttpCode(HttpStatus.OK)
   async findOne(@Param('id') id: string): Promise<BookMotorResponse> {
     return await this.bookMotorsService.findOne(id);
+  }
+
+  @Roles('admin', 'owner', 'traveller')
+  @Put('update-status/:id')
+  @HttpCode(HttpStatus.OK)
+  async updateStatus(
+    @Param('id') id: string,
+    @Body() body: { status: string },
+  ): Promise<WebResponse> {
+    await this.bookMotorsService.updateStatus(id, body.status as any);
+    return {
+      message: 'Booking status updated successfully',
+    };
   }
 }

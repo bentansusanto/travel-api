@@ -10,7 +10,7 @@ import { Public } from 'src/common/decorators/public.decorator';
 export class MotorsController {
   constructor(private readonly motorsService: MotorsService) {}
 
-  @Roles('owner, admin')
+  @Roles('owner', 'admin', 'developer')
   @Post('create')
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() createMotorDto: CreateMotorDto):Promise<WebResponse> {
@@ -43,7 +43,7 @@ export class MotorsController {
     };
   }
 
-  @Roles('owner, admin')
+  @Roles('owner', 'admin', 'developer')
   @Put('update/:id')
   @HttpCode(HttpStatus.OK)
   async update(@Param('id') id: string, @Body() updateMotorDto: UpdateMotorDto):Promise<WebResponse> {
@@ -54,7 +54,7 @@ export class MotorsController {
     };
   }
 
-  @Roles('owner, admin')
+  @Roles('owner', 'admin', 'developer')
   @Delete('delete/:id')
   @HttpCode(HttpStatus.OK)
   async remove(@Param('id') id: string):Promise<WebResponse> {

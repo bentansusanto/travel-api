@@ -33,6 +33,11 @@ services:
       - DATABASE_NAME=travel_db
       - DATABASE_USER=traveldb
       - DATABASE_PASSWORD=traveldb
+      - ID_SECRET=travelindo
+      - REFRESH_TOKEN=travelindo13
+      - ACCESS_TOKEN=travelindo14
+      - EXPIRED_ACCESS_TOKEN=1h
+      - EXPIRED_REFRESH_TOKEN=1d
     command: pnpm start:dev
     depends_on:
       - travel_mysql

@@ -9,7 +9,7 @@ import { Public } from 'src/common/decorators/public.decorator';
 export class AddOnsController {
   constructor(private readonly addOnsService: AddOnsService) {}
 
-  @Roles('owner, admin')
+  @Roles('owner, admin', 'developer')
   @Post('create')
   @HttpCode(HttpStatus.CREATED)
   async create(@Body() createAddOnDto: CreateAddOnDto): Promise<WebResponse> {
@@ -20,7 +20,6 @@ export class AddOnsController {
     };
   }
 
-  @Public()
   @Get('find-all')
   @HttpCode(HttpStatus.OK)
   async findAll(): Promise<WebResponse> {
@@ -31,7 +30,6 @@ export class AddOnsController {
     };
   }
 
-  @Public()
   @Get(':id')
   @HttpCode(HttpStatus.OK)
   async findOne(@Param('id') id: string): Promise<WebResponse> {
@@ -42,7 +40,18 @@ export class AddOnsController {
     };
   }
 
-  @Roles('owner, admin')
+  @Public()
+  @Get('find-category/:category')
+  @HttpCode(HttpStatus.OK)
+  async findByCategory(@Param('category') category: string): Promise<WebResponse> {
+    const result = await this.addOnsService.findByCategory(category);
+    return {
+      message: result.message,
+      data: result.datas,
+    };
+  }
+
+  @Roles('owner, admin', 'developer')
   @Put('update/:id')
   @HttpCode(HttpStatus.OK)
   async update(@Param('id') id: string, @Body() updateAddOnDto: UpdateAddOnDto): Promise<WebResponse> {
@@ -53,7 +62,7 @@ export class AddOnsController {
     };
   }
 
-  @Roles('owner, admin')
+  @Roles('owner, admin', 'developer')
   @Delete('delete/:id')
   @HttpCode(HttpStatus.OK)
   async remove(@Param('id') id: string): Promise<WebResponse> {

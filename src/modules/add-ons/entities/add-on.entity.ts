@@ -15,6 +15,15 @@ export enum AddOnCategory {
   GENERAL = 'general',
 }
 
+export class ColumnNumericTransformer {
+  to(data: number): number {
+    return data;
+  }
+  from(data: string): number {
+    return parseFloat(data);
+  }
+}
+
 @Entity('add_ons')
 export class AddOn {
   @PrimaryColumn()
@@ -38,8 +47,18 @@ export class AddOn {
     precision: 10,
     scale: 2,
     default: 0,
+    transformer: new ColumnNumericTransformer(),
   })
   price: number;
+
+  @Column({
+    type: 'decimal',
+    precision: 10,
+    scale: 2,
+    nullable: true,
+    transformer: new ColumnNumericTransformer(),
+  })
+  max_price: number;
 
   @Column({
     type: 'enum',
